@@ -168,7 +168,7 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 
 ## 未検証・既知の制約
 
-- Nix 版は `nix build` と起動・更新確認のログまでは確認したが、通知の表示とログイン時の起動（`/nix/store` のパスでの `SMAppService` 登録）は実機で確認していない
+- Nix 版は aarch64-darwin で、通知の表示と、新版を見つけても置き換えずに案内だけ出すことを確認した。ログイン時の起動（`/nix/store` のパスでの `SMAppService` 登録）と x86_64-darwin でのビルドは確認していない
 - Windows 版はビルド・clippy・テストを CI で確認しているが、実機での動作は確認していない。通知は `notify-rust` の既定（PowerShell の AppUserModelID）名義で送られる。自前の名義にするには、インストーラーで AppUserModelID を登録する必要がある
 - IPv6 は未対応（macOS では IPv6 に `ping6` が別途必要）
 - 復旧通知は判定ロジックのテストのみで、実際の回線断からの復旧では確認していない
