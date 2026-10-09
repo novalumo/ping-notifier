@@ -9,6 +9,10 @@
 
 ### macOS
 
+With Homebrew: `brew install --cask novalumo/tap/ping-notifier`
+
+Manually:
+
 1. Unzip the file and move `Ping Notifier.app` to the Applications folder
 2. If macOS says the app can't be opened, click "Open Anyway" at the bottom of System Settings > Privacy & Security
    - Alternatively, run `xattr -dr com.apple.quarantine "/Applications/Ping Notifier.app"` in Terminal
@@ -42,6 +46,10 @@ Open the settings file via "Open Settings File" from the menu bar (system tray o
 ## インストール
 
 ### macOS
+
+Homebrew の場合: `brew install --cask novalumo/tap/ping-notifier`
+
+手動の場合:
 
 1. zip を展開し、`Ping Notifier.app` を「アプリケーション」フォルダに移動する
 2. 初回はダブルクリックすると「開けません」と表示される。「システム設定 > プライバシーとセキュリティ」の下部にある「このまま開く」を押す

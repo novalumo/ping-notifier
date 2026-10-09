@@ -141,6 +141,7 @@ flake は devShell のみで、`nix build` 用の `packages` 出力はない。
 - ワークフローの `if:` では `secrets` コンテキストを直接参照できないため、ジョブの `env` に移してから `env.X != ''` で判定している
 - Windows のコード署名はしていない（SmartScreen の警告が出る）
 - リリースジョブは配布ファイルから `SHA256SUMS` を生成して添付する。自動アップデートの検証に使う
+- Homebrew の Cask は別リポジトリ [novalumo/homebrew-tap](https://github.com/novalumo/homebrew-tap) の `Casks/ping-notifier.rb`。リリース後に `version` と `sha256`（macOS の zip）を手で更新する。配布ファイル名を変えるときは Cask の `url` も合わせること
 - `--locked` を付けているので、依存を変えたら `Cargo.lock` もコミットすること
 
 ## テスト方針
