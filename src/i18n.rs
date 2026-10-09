@@ -17,11 +17,12 @@ use serde::Deserialize;
 pub enum Lang {
     En = 0,
     Ja = 1,
+    Zh = 2,
 }
 
 impl Lang {
     /// 対応しているすべての言語。並びは判別子（`as u8`）の値と一致させる
-    pub const ALL: [Lang; 2] = [Lang::En, Lang::Ja];
+    pub const ALL: [Lang; 3] = [Lang::En, Lang::Ja, Lang::Zh];
 }
 
 /// 設定ファイルの `language`
@@ -33,6 +34,7 @@ pub enum LanguageSetting {
     Auto,
     En,
     Ja,
+    Zh,
 }
 
 impl LanguageSetting {
@@ -41,6 +43,7 @@ impl LanguageSetting {
             Self::Auto => from_locales(sys_locale::get_locales()),
             Self::En => Lang::En,
             Self::Ja => Lang::Ja,
+            Self::Zh => Lang::Zh,
         }
     }
 }
@@ -72,8 +75,28 @@ fn from_locale(tag: &str) -> Option<Lang> {
     match primary.as_str() {
         "en" => Some(Lang::En),
         "ja" => Some(Lang::Ja),
+        "zh" => is_simplified_chinese(tag).then_some(Lang::Zh),
         _ => None,
     }
+}
+
+/// 簡体字の中国語のロケールか。用字（`Hans` / `Hant`）があればそれに従い、なければ地域で判断する。
+/// 繁体字を使う台湾・香港・マカオは対象外にして、次の優先言語に進める
+fn is_simplified_chinese(tag: &str) -> bool {
+    let subtags: Vec<String> = tag
+        .split(['-', '_'])
+        .skip(1)
+        .map(|s| s.to_ascii_lowercase())
+        .collect();
+    if subtags.iter().any(|s| s == "hans") {
+        return true;
+    }
+    if subtags.iter().any(|s| s == "hant") {
+        return false;
+    }
+    !subtags
+        .iter()
+        .any(|s| matches!(s.as_str(), "tw" | "hk" | "mo"))
 }
 
 /// 現在の表示言語で文言を返す
@@ -138,6 +161,7 @@ impl Msg<'_> {
         match lang {
             Lang::En => self.en(),
             Lang::Ja => self.ja(),
+            Lang::Zh => self.zh(),
         }
     }
 
@@ -258,6 +282,62 @@ impl Msg<'_> {
             Self::TrayCreateFailedTitle => "トレイアイコンを作成できませんでした".into(),
         }
     }
+
+    fn zh(&self) -> String {
+        match *self {
+            Self::MenuStarting => "正在启动…".into(),
+            Self::MenuPause => "暂停".into(),
+            Self::MenuOpenConfig => "打开设置文件".into(),
+            Self::MenuReloadConfig => "重新加载设置".into(),
+            Self::MenuLaunchAtLogin => "登录时启动".into(),
+            Self::MenuLaunchAtLoginUnavailable => "登录时启动（当前环境不可用）".into(),
+            Self::MenuCheckForUpdates => "检查更新".into(),
+            Self::MenuDownloadUpdate { version } => format!("下载 v{version}…"),
+            Self::MenuVersion { version } => format!("版本 {version}"),
+            Self::MenuQuit => "退出".into(),
+
+            Self::StatusPaused => "已暂停".into(),
+            Self::StatusUp { host } => format!("{host}: 正常"),
+            Self::StatusDown { host, consecutive } => {
+                format!("{host}: 无响应（连续 {consecutive} 次）")
+            }
+            Self::StatusPingError { host } => format!("{host}: 无法执行 ping"),
+
+            Self::LostTitle => "检测到丢包".into(),
+            Self::LostBody { host, consecutive } => {
+                format!("{host} 连续 {consecutive} 次无响应")
+            }
+            Self::RecoveredTitle => "连接已恢复".into(),
+            Self::RecoveredBody { host, lost, secs } => {
+                format!("与 {host} 的连接已恢复（丢包 {lost} 次，约 {secs} 秒）")
+            }
+
+            Self::UpdateCheckFailedTitle => "无法检查更新".into(),
+            Self::UpToDateTitle => "已是最新版本".into(),
+            Self::UpToDateBody { version } => format!("v{version} 是最新版本。"),
+            Self::UpdateAvailableTitle => "有新版本可用".into(),
+            Self::UpdateAvailableBody { version } => {
+                format!("v{version} 已发布，可从菜单下载。")
+            }
+            Self::UpdatedTitle => "已更新".into(),
+            Self::UpdatedBody { from, to } => format!("已从 v{from} 更新到 v{to}。"),
+            Self::UpdateFailedTitle => "更新失败".into(),
+            Self::UpdateFailedHint => "可从菜单打开下载页面。".into(),
+            Self::RelaunchFailedTitle => "无法重新启动，请手动重新打开应用。".into(),
+
+            Self::AutostartSetFailedTitle => "无法更改登录时启动设置".into(),
+            Self::AutostartApprovalTitle => "登录时启动需要你的批准".into(),
+            Self::AutostartApprovalBody => {
+                "请在“系统设置 > 通用 > 登录项”中允许 Ping Notifier。".into()
+            }
+
+            Self::ConfigLoadFailedUsingDefaultsTitle => "无法加载设置（将使用默认值）".into(),
+            Self::ConfigLoadFailedTitle => "无法加载设置".into(),
+            Self::ConfigOpenFailedTitle => "无法打开设置文件".into(),
+            Self::DownloadPageOpenFailedTitle => "无法打开下载页面".into(),
+            Self::TrayCreateFailedTitle => "无法创建托盘图标".into(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -326,5 +406,41 @@ mod tests {
         };
         assert_eq!(msg.in_lang(Lang::En), "Updated from v0.5.0 to v0.5.1.");
         assert_eq!(msg.in_lang(Lang::Ja), "v0.5.0 から v0.5.1 に更新しました");
+    }
+
+    #[test]
+    fn supports_simplified_chinese() {
+        for tag in [
+            "zh",
+            "zh-CN",
+            "zh_CN",
+            "zh-SG",
+            "zh-Hans",
+            "zh-Hans-CN",
+            "zh-Hans-HK",
+        ] {
+            assert_eq!(from_locale(tag), Some(Lang::Zh), "{tag}");
+        }
+        for tag in [
+            "zh-TW",
+            "zh-HK",
+            "zh-MO",
+            "zh-Hant",
+            "zh-Hant-TW",
+            "zh-Hant-CN",
+        ] {
+            assert_eq!(from_locale(tag), None, "{tag}");
+        }
+        assert_eq!(
+            from_locales(locales(&["zh-Hant-TW", "zh-Hans-CN"])),
+            Lang::Zh
+        );
+        assert_eq!(LanguageSetting::Zh.resolve(), Lang::Zh);
+
+        let msg = Msg::StatusDown {
+            host: "8.8.8.8",
+            consecutive: 3,
+        };
+        assert_eq!(msg.in_lang(Lang::Zh), "8.8.8.8: 无响应（连续 3 次）");
     }
 }
