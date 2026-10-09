@@ -1,0 +1,127 @@
+name: Release
+
+# v* タグの push で macOS / Windows 向けにビルドし、GitHub Release を作成する。
+# 手動実行（workflow_dispatch）ではビルドと成果物のアップロードだけを行い、Release は作らない。
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: version
+        name: Check tag matches Cargo.toml
+        shell: bash
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)
+          if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "::error::タグ $GITHUB_REF_NAME が Cargo.toml の version ($version) と一致しません"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  macos:
+    name: Build macOS (universal)
+    needs: version
+    runs-on: macos-latest
+    env:
+      ARCHIVE: PingNotifier-${{ needs.version.outputs.version }}-macos-universal.zip
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-bundle
+        run: cargo install cargo-bundle --version 0.9.0 --locked
+
+      - name: Build
+        run: |
+          cargo build --release --locked --target aarch64-apple-darwin
+          cargo build --release --locked --target x86_64-apple-darwin
+
+      - name: Bundle universal .app
+        run: |
+          cargo bundle --release --target aarch64-apple-darwin
+          app="target/aarch64-apple-darwin/release/bundle/osx/Ping Notifier.app"
+          # 両アーキテクチャのバイナリを 1 つにまとめて .app に入れ直す
+          lipo -create \
+            target/aarch64-apple-darwin/release/ping-notifier \
+            target/x86_64-apple-darwin/release/ping-notifier \
+            -output "$app/Contents/MacOS/ping-notifier"
+          lipo -info "$app/Contents/MacOS/ping-notifier"
+          codesign --force --sign - "$app"
+          ditto -c -k --keepParent "$app" "$ARCHIVE"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos
+          path: ${{ env.ARCHIVE }}
+          if-no-files-found: error
+
+  windows:
+    name: Build Windows (x64)
+    needs: version
+    runs-on: windows-latest
+    env:
+      ARCHIVE: PingNotifier-${{ needs.version.outputs.version }}-windows-x64.zip
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Archive
+        shell: pwsh
+        run: Compress-Archive -Path target/release/ping-notifier.exe -DestinationPath $env:ARCHIVE
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows
+          path: ${{ env.ARCHIVE }}
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    if: github.ref_type == 'tag'
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file .github/release-notes.md \
+            --generate-notes \
+            --verify-tag
