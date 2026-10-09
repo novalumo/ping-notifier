@@ -180,3 +180,75 @@ jobs:
             --notes-file .github/release-notes.md \
             --generate-notes \
             --verify-tag
+
+  # novalumo/homebrew-tap の Cask を新しいバージョンに更新する。
+  # tap への書き込みには GitHub App のトークンを使う。シークレットが未登録なら警告を出してスキップする
+  homebrew:
+    name: Update Homebrew cask
+    if: github.ref_type == 'tag'
+    needs: [version, release]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      ARCHIVE: PingNotifier-${{ needs.version.outputs.version }}-macos-arm64.zip
+      CASK: tap/Casks/ping-notifier.rb
+      HOMEBREW_TAP_APP_CLIENT_ID: ${{ secrets.HOMEBREW_TAP_APP_CLIENT_ID }}
+      HOMEBREW_TAP_APP_PRIVATE_KEY: ${{ secrets.HOMEBREW_TAP_APP_PRIVATE_KEY }}
+    steps:
+      - name: Check secrets
+        if: env.HOMEBREW_TAP_APP_CLIENT_ID == '' || env.HOMEBREW_TAP_APP_PRIVATE_KEY == ''
+        run: echo "::warning::tap 用のシークレットが未登録のため、Cask を更新しません。novalumo/homebrew-tap の Casks/ping-notifier.rb を手動で更新してください"
+
+      - id: token
+        if: env.HOMEBREW_TAP_APP_CLIENT_ID != '' && env.HOMEBREW_TAP_APP_PRIVATE_KEY != ''
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ env.HOMEBREW_TAP_APP_CLIENT_ID }}
+          private-key: ${{ env.HOMEBREW_TAP_APP_PRIVATE_KEY }}
+          owner: novalumo
+          repositories: homebrew-tap
+          permission-contents: write
+
+      - if: steps.token.outcome == 'success'
+        uses: actions/checkout@v7
+        with:
+          repository: novalumo/homebrew-tap
+          token: ${{ steps.token.outputs.token }}
+          path: tap
+
+      # Release に添付したものと同じファイル（ビルドジョブの成果物）からハッシュを取る
+      - if: steps.token.outcome == 'success'
+        uses: actions/download-artifact@v8
+        with:
+          name: macos
+          path: dist
+
+      - name: Update cask
+        if: steps.token.outcome == 'success'
+        run: |
+          sha256=$(sha256sum "dist/$ARCHIVE" | cut -d' ' -f1)
+          # url も書き換えるので、配布ファイル名を変えたときはここも合わせること
+          url='https://github.com/siraken/ping-notifier/releases/download/v#{version}/PingNotifier-#{version}-macos-arm64.zip'
+          sed -i -E \
+            -e "s|^  version \".*\"$|  version \"$VERSION\"|" \
+            -e "s|^  sha256 \".*\"$|  sha256 \"$sha256\"|" \
+            -e "s|^  url \".*\"$|  url \"$url\"|" \
+            "$CASK"
+          # 書き換え漏れ（Cask の書式が変わった場合など）を検出する
+          grep -qxF "  version \"$VERSION\"" "$CASK"
+          grep -qxF "  sha256 \"$sha256\"" "$CASK"
+          grep -qxF "  url \"$url\"" "$CASK"
+          git -C tap diff
+
+      - name: Push
+        if: steps.token.outcome == 'success'
+        working-directory: tap
+        run: |
+          if git diff --quiet; then
+            echo "Cask is already up to date"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "ping-notifier $VERSION"
+          git push

@@ -48,8 +48,7 @@ flake はソースからビルドする。`$out/Applications/Ping Notifier.app` 
 
 1. `Cargo.toml` の `version` を更新してコミットする
 2. 同じバージョンのタグを push する（例: `git tag v0.2.0 && git push origin v0.2.0`）
-3. `.github/workflows/release.yml` が macOS / Windows 向けにビルドし、GitHub Release を作成する
-4. [novalumo/homebrew-tap](https://github.com/novalumo/homebrew-tap) の `Casks/ping-notifier.rb` の `version` と `sha256` を更新する（macOS の zip のハッシュは `SHA256SUMS` にある）
+3. `.github/workflows/release.yml` が macOS / Windows 向けにビルドして GitHub Release を作成し、[novalumo/homebrew-tap](https://github.com/novalumo/homebrew-tap) の `Casks/ping-notifier.rb` を更新する（後述）
 
 タグと `Cargo.toml` の `version` が一致しないとワークフローは失敗する。Actions 画面から手動実行（workflow_dispatch）すると、Release を作らずにビルドだけを試せる（成果物は実行結果の Artifacts から取得できる）。
 
@@ -92,6 +91,27 @@ gh secret set APPLE_API_ISSUER_ID --body xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 ```
 
 ad-hoc 署名の版から Developer ID 署名の版へも自動アップデートできる。一度 Developer ID 署名の版になると、以降は同じ Team ID で署名された版しか受け付けない。
+
+## Homebrew の Cask の更新（リリース用）
+
+Release の作成後、ワークフローが [novalumo/homebrew-tap](https://github.com/novalumo/homebrew-tap) の `Casks/ping-notifier.rb` の `version`・`sha256`・`url` を書き換えて push する。tap への書き込みには GitHub App のトークンを使う。以下のシークレットが未登録ならこの手順は警告を出してスキップされるので、Cask を手で更新する。
+
+| シークレット | 内容 |
+| --- | --- |
+| `HOMEBREW_TAP_APP_CLIENT_ID` | GitHub App の Client ID |
+| `HOMEBREW_TAP_APP_PRIVATE_KEY` | GitHub App の秘密鍵（`.pem`） |
+
+準備:
+
+1. novalumo の Organization 設定（Developer settings → GitHub Apps）で GitHub App を作る。Webhook はオフにし、権限は Repository permissions → Contents: Read and write だけにする
+2. 秘密鍵を生成して `.pem` をダウンロードする
+3. App を novalumo にインストールし、対象リポジトリを `homebrew-tap` だけにする
+4. GitHub に登録する:
+
+```bash
+gh secret set HOMEBREW_TAP_APP_CLIENT_ID --body Iv23xxxxxxxxxxxxxxxx
+gh secret set HOMEBREW_TAP_APP_PRIVATE_KEY < app-name.2026-10-09.private-key.pem
+```
 
 ## ビルド
 
