@@ -6,12 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- The repository moved from `siraken/ping-notifier` to `novalumo/ping-notifier`. Old URLs redirect to the new location, so existing installs keep updating
+
 ## [0.5.0] - 2026-10-09
 
 ### Added
 
 - Install with Homebrew: `brew install --cask novalumo/tap/ping-notifier`
-- Install with Nix: `nix profile add github:siraken/ping-notifier`. The Nix build does not replace itself; update it with Nix
+- Install with Nix: `nix profile add github:novalumo/ping-notifier`. The Nix build does not replace itself; update it with Nix
 
 ### Changed
 
@@ -66,11 +70,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Icon color shows the status: OK / packet loss / paused / cannot run ping
 - TOML settings file that can be opened and reloaded from the menu
 
-[Unreleased]: https://github.com/siraken/ping-notifier/compare/v0.5.0...HEAD
-[0.5.0]: https://github.com/siraken/ping-notifier/compare/v0.4.0...v0.5.0
-[0.4.0]: https://github.com/siraken/ping-notifier/compare/v0.3.1...v0.4.0
-[0.3.1]: https://github.com/siraken/ping-notifier/compare/v0.3.0...v0.3.1
-[0.3.0]: https://github.com/siraken/ping-notifier/compare/v0.2.1...v0.3.0
-[0.2.1]: https://github.com/siraken/ping-notifier/compare/v0.2.0...v0.2.1
-[0.2.0]: https://github.com/siraken/ping-notifier/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/siraken/ping-notifier/releases/tag/v0.1.0
+[Unreleased]: https://github.com/novalumo/ping-notifier/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/novalumo/ping-notifier/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/novalumo/ping-notifier/compare/v0.3.1...v0.4.0
+[0.3.1]: https://github.com/novalumo/ping-notifier/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/novalumo/ping-notifier/compare/v0.2.1...v0.3.0
+[0.2.1]: https://github.com/novalumo/ping-notifier/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/novalumo/ping-notifier/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/novalumo/ping-notifier/releases/tag/v0.1.0

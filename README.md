@@ -21,8 +21,8 @@ The cask is in [novalumo/homebrew-tap](https://github.com/novalumo/homebrew-tap)
 ## Install with Nix (macOS, Apple Silicon)
 
 ```sh
-nix run github:siraken/ping-notifier          # try it without installing
-nix profile add github:siraken/ping-notifier  # install
+nix run github:novalumo/ping-notifier          # try it without installing
+nix profile add github:novalumo/ping-notifier  # install
 ```
 
 The flake builds the app from source. `$out/Applications/Ping Notifier.app` is the app itself and `$out/bin/ping-notifier` launches it. With nix-darwin or Home Manager, add the flake as an input and put `inputs.ping-notifier.packages.${pkgs.system}.default` in `environment.systemPackages` or `home.packages`.
@@ -35,7 +35,7 @@ Notes:
 
 ## Download
 
-Download the file for your OS from [Releases](https://github.com/siraken/ping-notifier/releases).
+Download the file for your OS from [Releases](https://github.com/novalumo/ping-notifier/releases).
 
 | OS | File |
 | --- | --- |
@@ -54,7 +54,7 @@ The workflow fails if the tag does not match `version` in `Cargo.toml`. Running 
 
 ## Automatic updates
 
-The app checks the latest version on [Releases](https://github.com/siraken/ping-notifier/releases) 30 seconds after launch and every 6 hours after that. When a new version is found, it is verified as follows before the app replaces itself and restarts.
+The app checks the latest version on [Releases](https://github.com/novalumo/ping-notifier/releases) 30 seconds after launch and every 6 hours after that. When a new version is found, it is verified as follows before the app replaces itself and restarts.
 
 1. The hash of the downloaded file matches `SHA256SUMS` attached to the release
 2. macOS only: the bundle ID of the extracted `.app` matches and its code signature is valid. If the running app is signed with a Developer ID, the new version must be signed by the same Team ID

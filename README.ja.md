@@ -21,8 +21,8 @@ Cask は [novalumo/homebrew-tap](https://github.com/novalumo/homebrew-tap) に�
 ## Nix でインストール（macOS、Apple Silicon）
 
 ```sh
-nix run github:siraken/ping-notifier          # インストールせずに試す
-nix profile add github:siraken/ping-notifier  # インストール
+nix run github:novalumo/ping-notifier          # インストールせずに試す
+nix profile add github:novalumo/ping-notifier  # インストール
 ```
 
 flake はソースからビルドする。`$out/Applications/Ping Notifier.app` がアプリ本体で、`$out/bin/ping-notifier` はそれを起動する。nix-darwin や Home Manager では flake を input に加え、`inputs.ping-notifier.packages.${pkgs.system}.default` を `environment.systemPackages` や `home.packages` に入れる。
@@ -35,7 +35,7 @@ flake はソースからビルドする。`$out/Applications/Ping Notifier.app` 
 
 ## ダウンロード
 
-[Releases](https://github.com/siraken/ping-notifier/releases) から OS に合ったファイルをダウンロードする。
+[Releases](https://github.com/novalumo/ping-notifier/releases) から OS に合ったファイルをダウンロードする。
 
 | OS | ファイル |
 | --- | --- |
@@ -54,7 +54,7 @@ flake はソースからビルドする。`$out/Applications/Ping Notifier.app` 
 
 ## 自動アップデート
 
-起動 30 秒後と、以降 6 時間ごとに [Releases](https://github.com/siraken/ping-notifier/releases) の最新版を確認する。新しいバージョンがあれば次の検証をしてから置き換え、再起動する。
+起動 30 秒後と、以降 6 時間ごとに [Releases](https://github.com/novalumo/ping-notifier/releases) の最新版を確認する。新しいバージョンがあれば次の検証をしてから置き換え、再起動する。
 
 1. リリースに添付された `SHA256SUMS` とダウンロードしたファイルのハッシュが一致すること
 2. macOS のみ: 展開した `.app` の Bundle ID が一致し、署名の検証が通ること。実行中のアプリが Developer ID で署名されている場合は、同じ Team ID の署名であることも求める

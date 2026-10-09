@@ -16,7 +16,7 @@ use sha2::{Digest, Sha256};
 use crate::i18n::{Msg, t};
 use crate::{log, notifier};
 
-const REPO: &str = "siraken/ping-notifier";
+const REPO: &str = "novalumo/ping-notifier";
 const USER_AGENT: &str = concat!("ping-notifier/", env!("CARGO_PKG_VERSION"));
 const SUMS_ASSET: &str = "SHA256SUMS";
 

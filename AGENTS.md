@@ -96,7 +96,8 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 
 ### 自動アップデート
 
-- `updater.rs` は `api.github.com/repos/siraken/ping-notifier/releases/latest` を認証なしで読む。リポジトリが非公開だと 404 になり更新できない
+- `updater.rs` は `api.github.com/repos/novalumo/ping-notifier/releases/latest` を認証なしで読む。リポジトリが非公開だと 404 になり更新できない
+- リポジトリは 2026-10-09 に `siraken/ping-notifier` から `novalumo/ping-notifier` へ移した。v0.5.0 以前は旧名を参照しているが、GitHub のリダイレクト（API は 301 → `/repositories/<id>/...`）を ureq がたどるので更新できる（移動直後に確認済み）。**`siraken/ping-notifier` という名前で新しいリポジトリを作るとリダイレクトが切れ、それらの版が更新できなくなる**
 - 配布ファイル名（`PingNotifier-<ver>-macos-arm64.zip` / `-windows-x64.zip`）と `SHA256SUMS` はアップデータとリリースワークフローの間の契約。どちらかを変えるときは両方を合わせること
 - 検証: `SHA256SUMS` のハッシュ照合に加え、macOS では Bundle ID・`codesign --verify --deep --strict`・（実行中のアプリが Developer ID 署名なら）同一 Team ID の要件を確認する。Windows は署名がないのでハッシュ照合のみ
 - macOS の置き換えは `.app` と同じディレクトリに `.ping-notifier-update/` を作り、`ditto` で展開して `rename` で入れ替える（同一ボリューム内で原子的に入れ替えるため）。署名済み `.app` の展開に `unzip` や `zip` クレートを使うと拡張属性やシンボリックリンクが崩れて署名が壊れるので `ditto` を使う

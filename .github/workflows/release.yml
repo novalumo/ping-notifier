@@ -228,7 +228,7 @@ jobs:
         run: |
           sha256=$(sha256sum "dist/$ARCHIVE" | cut -d' ' -f1)
           # url も書き換えるので、配布ファイル名を変えたときはここも合わせること
-          url='https://github.com/siraken/ping-notifier/releases/download/v#{version}/PingNotifier-#{version}-macos-arm64.zip'
+          url='https://github.com/novalumo/ping-notifier/releases/download/v#{version}/PingNotifier-#{version}-macos-arm64.zip'
           sed -i -E \
             -e "s|^  version \".*\"$|  version \"$VERSION\"|" \
             -e "s|^  sha256 \".*\"$|  sha256 \"$sha256\"|" \
