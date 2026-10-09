@@ -2,7 +2,7 @@
 
 | OS | File |
 | --- | --- |
-| macOS (Apple Silicon / Intel) | `PingNotifier-*-macos-universal.zip` |
+| macOS (Apple Silicon) | `PingNotifier-*-macos-arm64.zip` |
 | Windows (x64) | `PingNotifier-*-windows-x64.zip` |
 
 ## Install
@@ -40,7 +40,7 @@ Open the settings file via "Open Settings File" from the menu bar (system tray o
 
 | OS | ファイル |
 | --- | --- |
-| macOS（Apple Silicon / Intel） | `PingNotifier-*-macos-universal.zip` |
+| macOS（Apple Silicon） | `PingNotifier-*-macos-arm64.zip` |
 | Windows（x64） | `PingNotifier-*-windows-x64.zip` |
 
 ## インストール

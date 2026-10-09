@@ -34,11 +34,11 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
   macos:
-    name: Build macOS (universal)
+    name: Build macOS (Apple Silicon)
     needs: version
     runs-on: macos-latest
     env:
-      ARCHIVE: PingNotifier-${{ needs.version.outputs.version }}-macos-universal.zip
+      ARCHIVE: PingNotifier-${{ needs.version.outputs.version }}-macos-arm64.zip
       APP: target/aarch64-apple-darwin/release/bundle/osx/Ping Notifier.app
       # 署名・公証用のシークレット。未登録なら ad-hoc 署名で配布する
       MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
@@ -51,26 +51,21 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin, x86_64-apple-darwin
+          targets: aarch64-apple-darwin
 
       - uses: Swatinem/rust-cache@v2
 
       - name: Install cargo-bundle
         run: cargo install cargo-bundle --version 0.9.0 --locked
 
+      # Intel Mac は今後廃止されるため、Apple Silicon 向けだけをビルドする。
+      # cargo bundle は --locked を渡せないので、先に cargo build で Cargo.lock どおりにビルドしておく
       - name: Build
-        run: |
-          cargo build --release --locked --target aarch64-apple-darwin
-          cargo build --release --locked --target x86_64-apple-darwin
+        run: cargo build --release --locked --target aarch64-apple-darwin
 
-      - name: Bundle universal .app
+      - name: Bundle .app
         run: |
           cargo bundle --release --target aarch64-apple-darwin
-          # 両アーキテクチャのバイナリを 1 つにまとめて .app に入れ直す
-          lipo -create \
-            target/aarch64-apple-darwin/release/ping-notifier \
-            target/x86_64-apple-darwin/release/ping-notifier \
-            -output "$APP/Contents/MacOS/ping-notifier"
           lipo -info "$APP/Contents/MacOS/ping-notifier"
 
       - name: Import signing certificate
