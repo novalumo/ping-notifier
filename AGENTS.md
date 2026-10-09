@@ -12,7 +12,7 @@ ping のタイムアウト（パケットロス）を検知して OS の通知�
 
 - `main.rs` — `tao` のイベントループと `tray-icon` のメニューバーアイコン / メニュー。監視スレッドからの `Status` を受けてアイコン色とメニュー文言を更新する
 - `worker.rs` — 監視スレッド。`ping` → `Monitor` → 通知を回し、UI からの `Command`（一時停止 / 設定再読み込み）を `mpsc` で受ける。待機に `recv_timeout` を使うので指示は即座に反映される
-- `monitor.rs` — ping 結果の列から「ロス発生」「復旧」を判定する状態機械。副作用を持たない
+- `monitor.rs` — ping 結果の列から「ロス発生」「復旧」を判定する状態機械（`Monitor`）と、応答時間から「遅延」「解消」を判定する状態機械（`LatencyMonitor`）。副作用を持たない
 - `ping.rs` — OS 標準の `ping` コマンドを 1 回実行して疎通を判定し、出力から応答時間を読み取る
 - `notifier.rs` — `notify-rust` による通知送信と、macOS での送り主（Bundle ID）設定
 - `updater.rs` — GitHub Releases からの自動アップデート（更新スレッド、検証、OS ごとの置き換えと再起動）
@@ -81,6 +81,8 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 ### 通知の頻度
 
 `Monitor` はロス状態に入ったとき（`threshold` 回連続）と復旧したときだけイベントを返す。ロスが続いている間は繰り返し通知しない。一時停止と設定の再読み込みでは `Monitor` を作り直し、ロス回数を持ち越さない。
+
+遅延（`latency_threshold_ms` を設定したときだけ有効）も同じく、`LatencyMonitor` が状態に入ったときと戻ったときだけイベントを返す。しきい値付近で揺れたときに通知が往復しないよう、入るときも戻るときも `latency_consecutive` 回連続を条件にしている（単発の値で判定し、移動平均は使っていない）。ロスを優先し、ロス中は遅延を判定しない。ロス状態に入ったら遅延の状態は通知せずに捨て、復旧後に判定し直す。応答時間が読み取れなかった ping は遅延の判定に使わない（連続回数を途切れさせない）。遅延の解消通知は `notify_recovery` に従う。アイコンは遅延中が黄色。
 
 ### メニューバー / トレイ
 
@@ -168,8 +170,8 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 | 場所 | 対象 |
 | --- | --- |
 | `src/ping.rs::tests` | macOS・Linux・Windows（各言語版）の出力からの応答時間の読み取り |
-| `src/monitor.rs::tests` | しきい値、1 回の障害につき通知 1 回、復旧時のロス回数と停止時間 |
-| `src/config.rs::tests` | 全言語の初期テンプレートと `Config::default()` の一致、`language` の解釈、不正値・未知キーの拒否 |
+| `src/monitor.rs::tests` | しきい値、1 回の障害につき通知 1 回、復旧時のロス回数と停止時間、遅延の連続回数・解消の判定・遅延していた時間 |
+| `src/config.rs::tests` | 全言語の初期テンプレートと `Config::default()` の一致、テンプレートのコメントを外した `latency_threshold_ms` の読み込み、`language` の解釈、不正値・未知キーの拒否 |
 | `src/i18n.rs::tests` | ロケール文字列からの言語判定、優先順位とフォールバック、引数付き文言の整形 |
 | `src/autostart.rs` の Windows 用 tests | Run キーに登録するコマンドの引用符（Windows の CI でのみ実行） |
 | `src/updater.rs::tests` | タグのバージョン解釈と比較、`SHA256SUMS` の解析、SHA-256、OS ごとの配布ファイルの選択 |

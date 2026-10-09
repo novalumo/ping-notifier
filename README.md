@@ -4,8 +4,9 @@ English | [日本語](README.ja.md)
 
 A menu bar app (system tray app on Windows) that detects ping timeouts (packet loss) and shows them as OS notifications.
 
-- The icon color shows the status: green = OK / red = packet loss / gray = paused / orange = cannot run ping
+- The icon color shows the status: green = OK / yellow = high latency / red = packet loss / gray = paused / orange = cannot run ping
 - Shows the latest response time (RTT) in the menu and the tooltip
+- Optionally notifies when the response time stays above a threshold (off by default)
 - Notifications are sent only when packet loss starts and when the connection is restored (no repeated notifications during an outage)
 - Updates itself automatically when a new version is released (see below)
 - "Launch at Login" can be toggled from the menu (macOS 13 or later / Windows)
@@ -147,7 +148,9 @@ A settings file is created at the following location on first launch. Edit it vi
 | `interval_secs` | `1.0` | Interval between pings (seconds) |
 | `timeout_ms` | `1000` | How long to wait for a reply (milliseconds). No reply within this time counts as packet loss |
 | `threshold` | `1` | Number of consecutive losses before notifying |
-| `notify_recovery` | `true` | Also notify when the connection is restored |
+| `notify_recovery` | `true` | Also notify when the connection is restored (and when latency is back to normal) |
+| `latency_threshold_ms` | not set | Notify when the response time stays above this value (milliseconds). Not set = disabled |
+| `latency_consecutive` | `5` | Number of consecutive replies above `latency_threshold_ms` before notifying. The same count of replies at or below it is needed to treat latency as back to normal |
 | `auto_update` | `true` | Install new versions automatically |
 | `language` | `"auto"` | Display language: `"auto"` (follow the OS) or a language code (see [Display language](#display-language)) |
 

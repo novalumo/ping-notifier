@@ -37,6 +37,13 @@ threshold = 1
 # Also notify when the connection is restored
 notify_recovery = true
 
+# Notify when the response time stays above this value (milliseconds).
+# Disabled by default. Remove the leading # to enable.
+# latency_threshold_ms = 200
+
+# Number of consecutive slow replies before notifying (the same count is used to decide it is back to normal)
+latency_consecutive = 5
+
 # Install new versions automatically
 # Even when false, you can update manually with "Check for Updates" in the menu.
 auto_update = true
@@ -63,6 +70,13 @@ threshold = 1
 
 # 復旧時にも通知するか
 notify_recovery = true
+
+# 応答時間がこの値（ミリ秒）を超える状態が続いたら通知する
+# 既定では無効。行頭の # を外すと有効になります
+# latency_threshold_ms = 200
+
+# 何回連続でしきい値を超えたら通知するか（元に戻ったと判定するときも同じ回数）
+latency_consecutive = 5
 
 # 新しいバージョンを自動でインストールするか
 # false でもメニューの「アップデートを確認」から手動で更新できます
@@ -91,6 +105,13 @@ threshold = 1
 # 连接恢复时是否也发送通知
 notify_recovery = true
 
+# 响应时间持续超过此值（毫秒）时发送通知
+# 默认禁用。删除行首的 # 即可启用。
+# latency_threshold_ms = 200
+
+# 连续多少次超过阈值后发送通知（判断恢复正常时也使用相同次数）
+latency_consecutive = 5
+
 # 是否自动安装新版本
 # 即使设为 false，也可以通过菜单中的“检查更新”手动更新。
 auto_update = true
@@ -117,6 +138,13 @@ threshold = 1
 
 # 연결이 복구되었을 때도 알림을 보낼지
 notify_recovery = true
+
+# 응답 시간이 이 값(밀리초)을 넘는 상태가 계속되면 알림을 보낼지
+# 기본값은 비활성화입니다. 줄 앞의 #을 지우면 활성화됩니다.
+# latency_threshold_ms = 200
+
+# 몇 번 연속으로 임곗값을 넘으면 알림을 보낼지 (정상으로 돌아왔다고 판정할 때도 같은 횟수)
+latency_consecutive = 5
 
 # 새 버전을 자동으로 설치할지
 # false로 설정해도 메뉴의 "업데이트 확인"으로 수동 업데이트할 수 있습니다.
@@ -145,6 +173,13 @@ threshold = 1
 # Sciigi ankaŭ kiam la konekto restariĝas
 notify_recovery = true
 
+# Sciigi kiam la respondtempo daŭre superas ĉi tiun valoron (milisekundoj).
+# Malŝaltita defaŭlte. Forigu la komencan # por ŝalti ĝin.
+# latency_threshold_ms = 200
+
+# Nombro de sinsekvaj malrapidaj respondoj antaŭ sciigo (la sama nombro validas por decidi, ke ĝi revenis al normalo)
+latency_consecutive = 5
+
 # Aŭtomate instali novajn versiojn
 # Eĉ se false, vi povas ĝisdatigi permane per "Serĉi ĝisdatigojn" en la menuo.
 auto_update = true
@@ -172,6 +207,13 @@ threshold = 1
 # Auch benachrichtigen, wenn die Verbindung wiederhergestellt ist
 notify_recovery = true
 
+# Benachrichtigen, wenn die Antwortzeit dauerhaft über diesem Wert liegt (Millisekunden).
+# Standardmäßig deaktiviert. Entferne das # am Zeilenanfang, um es zu aktivieren.
+# latency_threshold_ms = 200
+
+# Anzahl aufeinanderfolgender langsamer Antworten, ab der benachrichtigt wird (gilt auch für die Rückkehr zum Normalzustand)
+latency_consecutive = 5
+
 # Neue Versionen automatisch installieren
 # Auch bei false kannst du über „Nach Updates suchen“ im Menü manuell aktualisieren.
 auto_update = true
@@ -185,6 +227,9 @@ pub struct Config {
     pub timeout_ms: u64,
     pub threshold: u32,
     pub notify_recovery: bool,
+    /// 応答時間のしきい値（ミリ秒）。`None` なら遅延の通知は無効
+    pub latency_threshold_ms: Option<u64>,
+    pub latency_consecutive: u32,
     pub auto_update: bool,
     pub language: LanguageSetting,
 }
@@ -197,6 +242,8 @@ impl Default for Config {
             timeout_ms: 1000,
             threshold: 1,
             notify_recovery: true,
+            latency_threshold_ms: None,
+            latency_consecutive: 5,
             auto_update: true,
             language: LanguageSetting::Auto,
         }
@@ -212,6 +259,10 @@ impl Config {
         Duration::from_millis(self.timeout_ms)
     }
 
+    pub fn latency_threshold(&self) -> Option<Duration> {
+        self.latency_threshold_ms.map(Duration::from_millis)
+    }
+
     fn validate(&self) -> Result<()> {
         ensure!(!self.host.trim().is_empty(), "host must not be empty");
         ensure!(
@@ -220,6 +271,14 @@ impl Config {
         );
         ensure!(self.timeout_ms > 0, "timeout_ms must be a positive number");
         ensure!(self.threshold > 0, "threshold must be at least 1");
+        ensure!(
+            self.latency_threshold_ms != Some(0),
+            "latency_threshold_ms must be a positive number"
+        );
+        ensure!(
+            self.latency_consecutive > 0,
+            "latency_consecutive must be at least 1"
+        );
         Ok(())
     }
 }
@@ -272,6 +331,14 @@ mod tests {
             assert_eq!(parsed.timeout_ms, default.timeout_ms, "{lang:?}");
             assert_eq!(parsed.threshold, default.threshold, "{lang:?}");
             assert_eq!(parsed.notify_recovery, default.notify_recovery, "{lang:?}");
+            assert_eq!(
+                parsed.latency_threshold_ms, default.latency_threshold_ms,
+                "{lang:?}"
+            );
+            assert_eq!(
+                parsed.latency_consecutive, default.latency_consecutive,
+                "{lang:?}"
+            );
             assert_eq!(parsed.auto_update, default.auto_update, "{lang:?}");
             assert_eq!(parsed.language, default.language, "{lang:?}");
         }
@@ -288,6 +355,26 @@ mod tests {
     fn rejects_invalid_values() {
         let config: Config = toml::from_str("interval_secs = 0").unwrap();
         assert!(config.validate().is_err());
+        let config: Config = toml::from_str("latency_threshold_ms = 0").unwrap();
+        assert!(config.validate().is_err());
+        let config: Config = toml::from_str("latency_consecutive = 0").unwrap();
+        assert!(config.validate().is_err());
         assert!(toml::from_str::<Config>("unknown = 1").is_err());
+    }
+
+    #[test]
+    fn latency_notification_is_disabled_unless_configured() {
+        assert_eq!(Config::default().latency_threshold(), None);
+        // テンプレートのコメントを外したときの値が読めること
+        for lang in Lang::ALL {
+            let enabled = default_config(lang)
+                .replace("# latency_threshold_ms = 200", "latency_threshold_ms = 200");
+            let parsed: Config = toml::from_str(&enabled).unwrap();
+            assert_eq!(
+                parsed.latency_threshold(),
+                Some(Duration::from_millis(200)),
+                "{lang:?}"
+            );
+        }
     }
 }
