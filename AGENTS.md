@@ -97,7 +97,7 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 - `osx_info_plist_exts` のファイルは `Info.plist` の `<dict>` 内に**そのまま差し込まれる**。完全な plist ではなく、`<key>` と値だけの断片を書くこと（XML 宣言や `<dict>` を含めると壊れた plist になる）
 - 1024px の画像は `1024x1024.png` という名前では `Failed to create app icon` で失敗する。`512x512@2x.png` という名前にする必要があり、`icons/generate.sh` はその名前で出力している
 - 生成物（`icons/png/`、`icons/icon.ico`）もリポジトリに含めている（ビルドに ImageMagick 等を要求しないため）。アイコンを変えるときは `icons/icon.svg` を編集してスクリプトで再生成する
-- Windows の `.exe` へのアイコン埋め込みは `build.rs` が `winresource` で行う。対象 OS は `CARGO_CFG_TARGET_OS` で判定する（`cfg(windows)` はビルドホストの判定になるため使わない）
+- Windows の `.exe` へのアイコンとバージョン情報の埋め込みは `build.rs` が `winresource` で行う。バージョン番号は `Cargo.toml` から自動で入るが、製品名・説明・会社名・著作権などは明示的に設定している（空だとウイルス対策ソフトに疑われやすく、Avast で毎回検知されていたため。これだけで検知が止まるとは限らず、根本対策はコード署名）。`FileDescription` はタスクマネージャーなどでアプリ名として表示される。対象 OS は `CARGO_CFG_TARGET_OS` で判定する（`cfg(windows)` はビルドホストの判定になるため使わない）
 
 ### 自動アップデート
 
