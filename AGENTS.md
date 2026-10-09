@@ -16,6 +16,7 @@ ping のタイムアウト（パケットロス）を検知して OS の通知�
 - `ping.rs` — OS 標準の `ping` コマンドを 1 回実行して疎通を判定する
 - `notifier.rs` — `notify-rust` による通知送信と、macOS での送り主（Bundle ID）設定
 - `updater.rs` — GitHub Releases からの自動アップデート（更新スレッド、検証、OS ごとの置き換えと再起動）
+- `autostart.rs` — ログイン時の自動起動の登録 / 解除（macOS: `SMAppService`、Windows: レジストリの Run キー）
 - `config.rs` — 設定ファイルの読み込み・初回生成・検証
 - `icon.rs` — 状態アイコン（色付きの円）を実行時に RGBA で描画する
 
@@ -104,6 +105,15 @@ flake は devShell のみで、`nix build` 用の `packages` 出力はない。
 - 自動更新に失敗した版は、手動確認されるまで自動では再試行しない（失敗通知の繰り返しを防ぐ）
 - `cfg(target_os = "macos")` 内だけで使う関数を共通部分に置くと、Windows の CI で dead code として `-D warnings` に落ちる。OS 固有の補助関数は `platform` モジュール内に置くこと
 
+### ログイン時の起動
+
+- 状態は OS 側の登録を正とし、設定ファイルには持たない（システム設定などで無効にされても表示が食い違わないように）。メニュー操作後は OS の実際の状態でチェック表示を上書きする
+- macOS は `SMAppService.mainAppService`（macOS 13 以降）。LaunchAgent の plist を自前で置く方式はログイン項目に出どころ不明の項目として表示され、AppleScript 方式は自動化の許可ダイアログが出るため採用していない
+- `mainAppService` は実行中の .app 自身を登録するため、.app 外（`cargo run`）では使えない。判定は `notifier::running_in_app_bundle()` を共用
+- 以前ユーザーがシステム設定で無効にしていると、登録しても `RequiresApproval` になる。その場合は `openSystemSettingsLoginItems` で設定画面を開いて許可を促す
+- 自動アップデートは .app を同じパスで置き換えるので、登録は引き継がれる想定（Bundle ID と Team ID が変わらないため）
+- Windows は `HKCU\...\Run` に引用符付きの exe パスを登録する。登録値が現在の exe パスと一致しなければ無効とみなす。タスクマネージャーの「スタートアップ アプリ」で無効化された状態（`StartupApproved`）までは見ていないため、その場合はメニュー上オンのままになる
+
 ## CI とリリース
 
 | ワークフロー | 契機 | 内容 |
@@ -129,6 +139,7 @@ flake は devShell のみで、`nix build` 用の `packages` 出力はない。
 | --- | --- |
 | `src/monitor.rs::tests` | しきい値、1 回の障害につき通知 1 回、復旧時のロス回数と停止時間 |
 | `src/config.rs::tests` | `DEFAULT_CONFIG` と `Config::default()` の一致、不正値・未知キーの拒否 |
+| `src/autostart.rs` の Windows 用 tests | Run キーに登録するコマンドの引用符（Windows の CI でのみ実行） |
 | `src/updater.rs::tests` | タグのバージョン解釈と比較、`SHA256SUMS` の解析、SHA-256、OS ごとの配布ファイルの選択 |
 
 `ping.rs`・`notifier.rs`・UI・アップデートの置き換え処理は OS やネットワークに依存するため自動テストはない。変更したら実機で確認すること。macOS では `.app` を作って起動し、`192.0.2.1` を監視する設定で通知が出るかを見る。

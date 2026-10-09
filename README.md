@@ -5,6 +5,7 @@ ping のタイムアウト（パケットロス）を検知して OS の通知�
 - アイコンの色で状態を表示: 緑 = 正常 / 赤 = ロス中 / 灰 = 一時停止 / 橙 = ping を実行できない
 - 通知はロス状態に入ったときと復旧したときにだけ送られる（ロスが続いている間は繰り返さない）
 - 新しいバージョンが公開されると自動でアップデートする（後述）
+- メニューの「ログイン時に起動」で自動起動を切り替えられる（macOS 13 以降 / Windows）
 
 ## ダウンロード
 
@@ -100,6 +101,15 @@ cp -R "target/release/bundle/osx/Ping Notifier.app" /Applications/
 | `threshold` | `1` | 何回連続でロスしたら通知するか |
 | `notify_recovery` | `true` | 復旧時にも通知するか |
 | `auto_update` | `true` | 新しいバージョンを自動でインストールするか |
+
+## ログイン時の起動
+
+メニューの「ログイン時に起動」で切り替える。状態は OS 側の登録をそのまま表示する。
+
+- macOS: 「システム設定 > 一般 > ログイン項目」に Ping Notifier として登録される（`SMAppService`、macOS 13 以降）。以前ここで無効にしていた場合は許可を求められるので、開いた設定画面で有効にする
+- Windows: `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run` に登録される。exe を移動した場合は、もう一度オンにすると新しい場所で登録し直す
+
+`cargo run` などの開発ビルドでは設定できない（メニュー項目が無効になる）。
 
 ## 仕組み
 
