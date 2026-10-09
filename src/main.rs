@@ -1,6 +1,7 @@
 // リリースビルドの Windows ではコンソールウィンドウを出さない
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
+mod autostart;
 mod config;
 mod icon;
 mod monitor;
@@ -61,6 +62,17 @@ fn main() -> Result<()> {
     let pause_item = CheckMenuItem::new("一時停止", true, false, None);
     let open_item = MenuItem::new("設定ファイルを開く", true, None);
     let reload_item = MenuItem::new("設定を再読み込み", true, None);
+    let autostart_supported = autostart::is_supported();
+    let autostart_item = CheckMenuItem::new(
+        if autostart_supported {
+            "ログイン時に起動"
+        } else {
+            "ログイン時に起動（この環境では利用不可）"
+        },
+        autostart_supported,
+        autostart_supported && is_autostart_enabled(),
+        None,
+    );
     let update_item = MenuItem::new("アップデートを確認", true, None);
     let version_item = MenuItem::new(
         format!("バージョン {}", updater::current_version()),
@@ -75,6 +87,7 @@ fn main() -> Result<()> {
         &pause_item,
         &open_item,
         &reload_item,
+        &autostart_item,
         &PredefinedMenuItem::separator(),
         &update_item,
         &version_item,
@@ -166,6 +179,8 @@ fn main() -> Result<()> {
                     if let Err(e) = open_in_editor(&config_path) {
                         report_error("設定ファイルを開けませんでした", &e);
                     }
+                } else if e.id == autostart_item.id() {
+                    toggle_autostart(&autostart_item);
                 } else if e.id == update_item.id() {
                     match &download_url {
                         Some(url) => {
@@ -192,6 +207,36 @@ fn main() -> Result<()> {
             _ => {}
         }
     })
+}
+
+fn is_autostart_enabled() -> bool {
+    match autostart::status() {
+        Ok(status) => status == autostart::Status::Enabled,
+        Err(e) => {
+            log(&format!("自動起動の状態を取得できませんでした: {e:#}"));
+            false
+        }
+    }
+}
+
+/// チェック項目はクリックした時点で表示が切り替わるので、その状態を希望として OS に反映し、
+/// 最後に OS 側の実際の状態に表示を合わせる
+fn toggle_autostart(item: &CheckMenuItem) {
+    let enabled = item.is_checked();
+    if let Err(e) = autostart::set_enabled(enabled) {
+        report_error("ログイン時の起動を設定できませんでした", &e);
+    }
+
+    let status = autostart::status().unwrap_or(autostart::Status::Disabled);
+    if enabled && status == autostart::Status::RequiresApproval {
+        notifier::notify(
+            "ログイン時の起動には許可が必要です",
+            "システム設定の「ログイン項目」で Ping Notifier を許可してください",
+        );
+        autostart::open_system_settings();
+    }
+    log(&format!("ログイン時の起動: {status:?}"));
+    item.set_checked(status == autostart::Status::Enabled);
 }
 
 fn describe(status: &Status) -> ([u8; 3], String) {

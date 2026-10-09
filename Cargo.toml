@@ -21,7 +21,12 @@ ureq = { version = "3.4.2", features = ["json"] }
 winresource = "0.1.31"
 
 [target."cfg(windows)".dependencies]
+windows-registry = "0.100.0"
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6.5"
+objc2-service-management = { version = "0.3.2", default-features = false, features = ["std", "SMAppService", "objc2", "objc2-foundation"] }
 
 [package.metadata.bundle]
 name = "Ping Notifier"

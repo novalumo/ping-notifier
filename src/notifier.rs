@@ -28,7 +28,7 @@ pub fn init() {
 pub fn init() {}
 
 #[cfg(target_os = "macos")]
-fn running_in_app_bundle() -> bool {
+pub(crate) fn running_in_app_bundle() -> bool {
     std::env::current_exe()
         .map(|exe| exe.to_string_lossy().contains(".app/Contents/MacOS/"))
         .unwrap_or(false)
