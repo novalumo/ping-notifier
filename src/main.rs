@@ -6,6 +6,7 @@ mod icon;
 mod monitor;
 mod notifier;
 mod ping;
+mod updater;
 mod worker;
 
 use std::path::Path;
@@ -18,16 +19,19 @@ use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuIt
 use tray_icon::{TrayIcon, TrayIconBuilder};
 
 use crate::config::Config;
+use crate::updater::{UpdateCommand, UpdateEvent};
 use crate::worker::{Command, Status};
 
 #[derive(Debug)]
 enum UserEvent {
     Menu(MenuEvent),
     Status(Status),
+    Update(UpdateEvent),
 }
 
 fn main() -> Result<()> {
     notifier::init();
+    updater::cleanup_previous();
 
     let config_path = config::path()?;
     let config = config::load_or_create(&config_path).unwrap_or_else(|e| {
@@ -57,6 +61,12 @@ fn main() -> Result<()> {
     let pause_item = CheckMenuItem::new("一時停止", true, false, None);
     let open_item = MenuItem::new("設定ファイルを開く", true, None);
     let reload_item = MenuItem::new("設定を再読み込み", true, None);
+    let update_item = MenuItem::new("アップデートを確認", true, None);
+    let version_item = MenuItem::new(
+        format!("バージョン {}", updater::current_version()),
+        false,
+        None,
+    );
     let quit_item = MenuItem::new("終了", true, None);
     let menu = Menu::new();
     menu.append_items(&[
@@ -65,6 +75,9 @@ fn main() -> Result<()> {
         &pause_item,
         &open_item,
         &reload_item,
+        &PredefinedMenuItem::separator(),
+        &update_item,
+        &version_item,
         &PredefinedMenuItem::separator(),
         &quit_item,
     ])
@@ -75,14 +88,21 @@ fn main() -> Result<()> {
         config.host,
         config_path.display()
     ));
+    let auto_update = config.auto_update;
     let proxy = event_loop.create_proxy();
     let worker = worker::spawn(config, move |status| {
         let _ = proxy.send_event(UserEvent::Status(status));
+    });
+    let proxy = event_loop.create_proxy();
+    let updater = updater::spawn(auto_update, move |event| {
+        let _ = proxy.send_event(UserEvent::Update(event));
     });
 
     let mut menu = Some(menu);
     let mut tray: Option<TrayIcon> = None;
     let mut last_status: Option<Status> = None;
+    // 自動で置き換えられなかった新バージョンのダウンロードページ
+    let mut download_url: Option<String> = None;
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
@@ -117,6 +137,25 @@ fn main() -> Result<()> {
                 last_status = Some(status);
             }
 
+            Event::UserEvent(UserEvent::Update(UpdateEvent::Installed { version, relaunch })) => {
+                match updater::relaunch(&relaunch) {
+                    Ok(()) => {
+                        log(&format!("v{version} で再起動します"));
+                        tray.take();
+                        *control_flow = ControlFlow::Exit;
+                    }
+                    // 置き換え自体は済んでいるので、次回起動時に新しいバージョンになる
+                    Err(e) => {
+                        report_error("再起動できませんでした。手動で起動し直してください", &e)
+                    }
+                }
+            }
+
+            Event::UserEvent(UserEvent::Update(UpdateEvent::Available { version, url })) => {
+                update_item.set_text(format!("v{version} をダウンロード…"));
+                download_url = Some(url);
+            }
+
             Event::UserEvent(UserEvent::Menu(e)) => {
                 if e.id == quit_item.id() {
                     tray.take();
@@ -127,10 +166,22 @@ fn main() -> Result<()> {
                     if let Err(e) = open_in_editor(&config_path) {
                         report_error("設定ファイルを開けませんでした", &e);
                     }
+                } else if e.id == update_item.id() {
+                    match &download_url {
+                        Some(url) => {
+                            if let Err(e) = open_url(url) {
+                                report_error("ダウンロードページを開けませんでした", &e);
+                            }
+                        }
+                        None => {
+                            let _ = updater.send(UpdateCommand::CheckNow);
+                        }
+                    }
                 } else if e.id == reload_item.id() {
                     match config::load_or_create(&config_path) {
                         Ok(config) => {
                             log(&format!("設定を再読み込みしました: {config:?}"));
+                            let _ = updater.send(UpdateCommand::SetAuto(config.auto_update));
                             let _ = worker.send(Command::Reload(config));
                         }
                         Err(e) => report_error("設定ファイルを読み込めませんでした", &e),
@@ -176,6 +227,20 @@ fn open_in_editor(path: &Path) -> Result<()> {
         cmd
     };
     cmd.spawn().context("エディタを起動できません")?;
+    Ok(())
+}
+
+fn open_url(url: &str) -> Result<()> {
+    #[cfg(target_os = "macos")]
+    let program = "open";
+    #[cfg(target_os = "windows")]
+    let program = "explorer";
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let program = "xdg-open";
+    Process::new(program)
+        .arg(url)
+        .spawn()
+        .context("ブラウザを起動できません")?;
     Ok(())
 }
 

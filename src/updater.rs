@@ -1,0 +1,564 @@
+//! GitHub Releases を使った自動アップデート。
+//!
+//! 新しいリリースを見つけたら zip をダウンロードし、同じリリースの `SHA256SUMS` と照合する。
+//! macOS では展開した `.app` の署名も検証してから、実行中のアプリを置き換えて再起動する。
+
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::thread;
+use std::time::Duration;
+
+use anyhow::{Context, Result, bail, ensure};
+use semver::Version;
+use serde::Deserialize;
+use sha2::{Digest, Sha256};
+
+use crate::{log, notifier};
+
+const REPO: &str = "siraken/ping-notifier";
+const USER_AGENT: &str = concat!("ping-notifier/", env!("CARGO_PKG_VERSION"));
+const SUMS_ASSET: &str = "SHA256SUMS";
+
+/// 起動直後はネットワークが安定していないことがあるので少し待ってから確認する
+const FIRST_CHECK_DELAY: Duration = Duration::from_secs(30);
+const CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+const HTTP_TIMEOUT: Duration = Duration::from_secs(120);
+const MAX_DOWNLOAD_BYTES: u64 = 100 * 1024 * 1024;
+
+#[cfg(target_os = "macos")]
+const ASSET_SUFFIX: &str = "-macos-universal.zip";
+#[cfg(target_os = "windows")]
+const ASSET_SUFFIX: &str = "-windows-x64.zip";
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+const ASSET_SUFFIX: &str = "";
+
+/// UI スレッドから更新スレッドへの指示
+#[derive(Debug)]
+pub enum UpdateCommand {
+    /// メニューからの手動確認。結果を必ず通知する
+    CheckNow,
+    /// 設定の `auto_update` が変わった
+    SetAuto(bool),
+}
+
+/// 更新スレッドから UI スレッドへ知らせる出来事
+#[derive(Debug)]
+pub enum UpdateEvent {
+    /// 置き換えが済んだ。`relaunch` を起動して自身は終了する
+    Installed { version: Version, relaunch: PathBuf },
+    /// 自動では置き換えられないため、ダウンロードページを案内する
+    Available { version: Version, url: String },
+}
+
+#[derive(Debug, Deserialize)]
+struct Release {
+    tag_name: String,
+    html_url: String,
+    assets: Vec<Asset>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Asset {
+    name: String,
+    browser_download_url: String,
+}
+
+pub fn current_version() -> Version {
+    Version::parse(env!("CARGO_PKG_VERSION")).expect("Cargo.toml の version は semver")
+}
+
+pub fn spawn(auto: bool, on_event: impl Fn(UpdateEvent) + Send + 'static) -> Sender<UpdateCommand> {
+    let (tx, rx) = mpsc::channel();
+    thread::Builder::new()
+        .name("updater".into())
+        .spawn(move || run(auto, &rx, &on_event))
+        .expect("更新スレッドを起動できませんでした");
+    tx
+}
+
+fn run(mut auto: bool, rx: &Receiver<UpdateCommand>, on_event: &dyn Fn(UpdateEvent)) {
+    let mut wait = FIRST_CHECK_DELAY;
+    // 自動更新に失敗した版は、手動で確認されるまで再試行しない（失敗通知の繰り返しを防ぐ）
+    let mut failed: Option<Version> = None;
+
+    loop {
+        let manual = match rx.recv_timeout(wait) {
+            Ok(UpdateCommand::CheckNow) => true,
+            Ok(UpdateCommand::SetAuto(a)) => {
+                auto = a;
+                continue;
+            }
+            Err(RecvTimeoutError::Timeout) => {
+                wait = CHECK_INTERVAL;
+                if !auto {
+                    continue;
+                }
+                false
+            }
+            Err(RecvTimeoutError::Disconnected) => return,
+        };
+        check_and_apply(manual, &mut failed, on_event);
+    }
+}
+
+fn check_and_apply(manual: bool, failed: &mut Option<Version>, on_event: &dyn Fn(UpdateEvent)) {
+    let current = current_version();
+    let (release, latest) = match fetch_latest() {
+        Ok(found) => found,
+        Err(e) => {
+            log(&format!("アップデートを確認できませんでした: {e:#}"));
+            if manual {
+                notifier::notify("アップデートを確認できませんでした", &format!("{e:#}"));
+            }
+            return;
+        }
+    };
+
+    if latest <= current {
+        log(&format!("最新版です（現在 v{current} / 最新 v{latest}）"));
+        if manual {
+            notifier::notify("最新版です", &format!("v{current} は最新版です"));
+        }
+        return;
+    }
+    if !manual && failed.as_ref() == Some(&latest) {
+        return;
+    }
+
+    let available = UpdateEvent::Available {
+        version: latest.clone(),
+        url: release.html_url.clone(),
+    };
+    if !can_self_update() {
+        notifier::notify(
+            "新しいバージョンがあります",
+            &format!("v{latest} が公開されています。メニューからダウンロードできます"),
+        );
+        on_event(available);
+        return;
+    }
+
+    log(&format!("v{latest} をインストールします"));
+    match install(&release) {
+        Ok(relaunch) => {
+            log(&format!("v{latest} をインストールしました"));
+            notifier::notify(
+                "アップデートしました",
+                &format!("v{latest} に更新しました。再起動します"),
+            );
+            on_event(UpdateEvent::Installed {
+                version: latest,
+                relaunch,
+            });
+        }
+        Err(e) => {
+            log(&format!("v{latest} のインストールに失敗しました: {e:#}"));
+            notifier::notify(
+                "アップデートに失敗しました",
+                &format!("{e:#}\nメニューからダウンロードページを開けます"),
+            );
+            *failed = Some(latest);
+            on_event(available);
+        }
+    }
+}
+
+/// 実行中のアプリをこの場で置き換えられるか。
+/// 開発中の `cargo run` などでは置き換えず、ダウンロードページの案内にとどめる
+pub fn can_self_update() -> bool {
+    platform::can_self_update()
+}
+
+/// 前回のアップデートで残った一時ファイルを掃除する。起動時に呼ぶ
+pub fn cleanup_previous() {
+    platform::cleanup_previous();
+}
+
+/// 置き換え後のアプリを起動する。呼び出し側はこの後すぐに終了すること
+pub fn relaunch(path: &Path) -> Result<()> {
+    platform::relaunch(path)
+}
+
+fn agent() -> ureq::Agent {
+    ureq::Agent::config_builder()
+        .timeout_global(Some(HTTP_TIMEOUT))
+        .build()
+        .into()
+}
+
+fn fetch_latest() -> Result<(Release, Version)> {
+    // /releases/latest は draft と prerelease を除いた最新のリリースを返す
+    let url = format!("https://api.github.com/repos/{REPO}/releases/latest");
+    let release: Release = agent()
+        .get(&url)
+        .header("Accept", "application/vnd.github+json")
+        .header("User-Agent", USER_AGENT)
+        .call()
+        .context("GitHub に接続できません")?
+        .body_mut()
+        .read_json()
+        .context("リリース情報を読めません")?;
+    let version = parse_tag(&release.tag_name)?;
+    Ok((release, version))
+}
+
+fn download(url: &str) -> Result<Vec<u8>> {
+    agent()
+        .get(url)
+        .header("User-Agent", USER_AGENT)
+        .call()
+        .with_context(|| format!("{url} をダウンロードできません"))?
+        .body_mut()
+        .with_config()
+        .limit(MAX_DOWNLOAD_BYTES)
+        .read_to_vec()
+        .with_context(|| format!("{url} をダウンロードできません"))
+}
+
+/// ダウンロードと検証を行い、実行中のアプリを置き換える。戻り値は再起動に使うパス
+fn install(release: &Release) -> Result<PathBuf> {
+    let asset = release
+        .assets
+        .iter()
+        .find(|a| is_platform_asset(&a.name))
+        .context("この OS 向けのファイルがリリースにありません")?;
+    let sums_asset = release
+        .assets
+        .iter()
+        .find(|a| a.name == SUMS_ASSET)
+        .context("リリースに SHA256SUMS がないため検証できません")?;
+
+    let sums = String::from_utf8(download(&sums_asset.browser_download_url)?)
+        .context("SHA256SUMS の形式が正しくありません")?;
+    let expected = expected_hash(&sums, &asset.name)
+        .with_context(|| format!("SHA256SUMS に {} の記載がありません", asset.name))?;
+
+    let archive = download(&asset.browser_download_url)?;
+    let actual = sha256_hex(&archive);
+    ensure!(
+        actual.eq_ignore_ascii_case(expected),
+        "{} のハッシュが一致しません（期待値 {expected} / 実際 {actual}）",
+        asset.name
+    );
+
+    platform::install(&archive)
+}
+
+fn parse_tag(tag: &str) -> Result<Version> {
+    Version::parse(tag.trim_start_matches('v'))
+        .with_context(|| format!("タグ {tag} をバージョンとして解釈できません"))
+}
+
+fn is_platform_asset(name: &str) -> bool {
+    !ASSET_SUFFIX.is_empty() && name.starts_with("PingNotifier-") && name.ends_with(ASSET_SUFFIX)
+}
+
+/// `sha256sum` 形式（`<hash>  <name>` / バイナリモードの `<hash> *<name>`）から該当行のハッシュを取り出す
+fn expected_hash<'a>(sums: &'a str, name: &str) -> Option<&'a str> {
+    sums.lines().find_map(|line| {
+        let (hash, file) = line.split_once(char::is_whitespace)?;
+        let file = file.trim_start().trim_start_matches('*');
+        (file == name).then_some(hash)
+    })
+}
+
+fn sha256_hex(data: &[u8]) -> String {
+    Sha256::digest(data)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// コマンドを実行し、失敗したら標準エラー出力を含めてエラーにする
+fn run_checked(cmd: &mut Command) -> Result<std::process::Output> {
+    let output = cmd
+        .output()
+        .with_context(|| format!("{cmd:?} を実行できません"))?;
+    if !output.status.success() {
+        bail!(
+            "{cmd:?} が失敗しました: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    Ok(output)
+}
+
+#[cfg(target_os = "macos")]
+mod platform {
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
+
+    use anyhow::{Context, Result, ensure};
+
+    use super::run_checked;
+    use crate::{log, notifier};
+
+    /// 作業用ディレクトリ。`rename` で置き換えられるよう、.app と同じディレクトリに作る
+    const WORK_DIR: &str = ".ping-notifier-update";
+
+    /// 実行中の .app のパス（`cargo run` などで .app 外から起動されていれば `None`）
+    fn current_app() -> Option<PathBuf> {
+        let exe = std::env::current_exe().ok()?;
+        let app = exe.parent()?.parent()?.parent()?;
+        (app.extension()? == "app").then(|| app.to_path_buf())
+    }
+
+    pub fn can_self_update() -> bool {
+        current_app().is_some()
+    }
+
+    pub fn cleanup_previous() {
+        if let Some(app) = current_app() {
+            let _ = fs::remove_dir_all(app.with_file_name(WORK_DIR));
+        }
+    }
+
+    pub fn install(archive: &[u8]) -> Result<PathBuf> {
+        let app = current_app().context(".app から起動されていません")?;
+        let work = app.with_file_name(WORK_DIR);
+        let _ = fs::remove_dir_all(&work);
+        fs::create_dir(&work).with_context(|| {
+            format!(
+                "{} に書き込めません",
+                work.parent().unwrap_or(&work).display()
+            )
+        })?;
+
+        let result = replace(&app, &work, archive);
+        // 置き換え済みの旧 .app もここで消える（実行中のバイナリは削除しても動き続ける）
+        let _ = fs::remove_dir_all(&work);
+        result.map(|()| app)
+    }
+
+    fn replace(app: &Path, work: &Path, archive: &[u8]) -> Result<()> {
+        let zip = work.join("update.zip");
+        fs::write(&zip, archive).context("ダウンロードしたファイルを保存できません")?;
+
+        // 署名済みの .app を壊さないよう、拡張属性やシンボリックリンクを保つ ditto で展開する
+        let extracted = work.join("extracted");
+        run_checked(
+            Command::new("ditto")
+                .args(["-x", "-k"])
+                .arg(&zip)
+                .arg(&extracted),
+        )?;
+        let new_app = fs::read_dir(&extracted)?
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .find(|p| p.extension().is_some_and(|ext| ext == "app"))
+            .context("ダウンロードしたファイルに .app が含まれていません")?;
+
+        verify(app, &new_app)?;
+
+        let old = work.join("old.app");
+        fs::rename(app, &old).context("現在のアプリを退避できません")?;
+        if let Err(e) = fs::rename(&new_app, app) {
+            let _ = fs::rename(&old, app);
+            return Err(e).context("新しいアプリを配置できません");
+        }
+        Ok(())
+    }
+
+    /// 新しい .app が本物かを検証する
+    fn verify(current: &Path, new_app: &Path) -> Result<()> {
+        let output = run_checked(
+            Command::new("plutil")
+                .args(["-extract", "CFBundleIdentifier", "raw", "-o", "-"])
+                .arg(new_app.join("Contents/Info.plist")),
+        )?;
+        let id = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        ensure!(
+            id == notifier::BUNDLE_ID,
+            "Bundle ID が一致しません（{id}）"
+        );
+
+        run_checked(
+            Command::new("codesign")
+                .args(["--verify", "--deep", "--strict"])
+                .arg(new_app),
+        )
+        .context("署名の検証に失敗しました")?;
+
+        // 実行中のアプリが Developer ID で署名されていれば、同じ Team ID の署名であることを求める
+        match team_id(current)? {
+            Some(team) => {
+                let requirement =
+                    format!("=anchor apple generic and certificate leaf[subject.OU] = \"{team}\"");
+                run_checked(
+                    Command::new("codesign")
+                        .args(["--verify", "--deep", "--strict", "-R"])
+                        .arg(requirement)
+                        .arg(new_app),
+                )
+                .context("署名者（Team ID）が一致しません")?;
+            }
+            None => log(
+                "実行中のアプリが Developer ID で署名されていないため、署名者の照合を省略します",
+            ),
+        }
+        Ok(())
+    }
+
+    fn team_id(app: &Path) -> Result<Option<String>> {
+        // codesign -d の詳細は標準エラー出力に出る
+        let output = run_checked(
+            Command::new("codesign")
+                .args(["-dv", "--verbose=2"])
+                .arg(app),
+        )?;
+        let info = String::from_utf8_lossy(&output.stderr);
+        Ok(info
+            .lines()
+            .find_map(|l| l.strip_prefix("TeamIdentifier="))
+            .filter(|t| *t != "not set")
+            .map(str::to_string))
+    }
+
+    pub fn relaunch(app: &Path) -> Result<()> {
+        // 自身の終了を待ってから開く（実行中に open すると既存プロセスが前面に出るだけになる）
+        Command::new("/bin/sh")
+            .arg("-c")
+            .arg(r#"while kill -0 "$1" 2>/dev/null; do sleep 0.2; done; open "$2""#)
+            .arg("sh")
+            .arg(std::process::id().to_string())
+            .arg(app)
+            .spawn()
+            .context("再起動用のプロセスを起動できません")?;
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "windows")]
+mod platform {
+    use std::fs::{self, File};
+    use std::io::{self, Cursor};
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
+
+    use anyhow::{Context, Result};
+
+    const EXE_NAME: &str = "ping-notifier.exe";
+
+    fn old_path(exe: &Path) -> PathBuf {
+        exe.with_extension("exe.old")
+    }
+
+    pub fn can_self_update() -> bool {
+        // 開発中の target/debug などは置き換えない
+        !cfg!(debug_assertions)
+    }
+
+    pub fn cleanup_previous() {
+        if let Ok(exe) = std::env::current_exe() {
+            let _ = fs::remove_file(old_path(&exe));
+        }
+    }
+
+    pub fn install(archive: &[u8]) -> Result<PathBuf> {
+        let exe = std::env::current_exe().context("実行ファイルの場所が分かりません")?;
+
+        let mut zip = zip::ZipArchive::new(Cursor::new(archive))
+            .context("ダウンロードしたファイルを展開できません")?;
+        let mut entry = zip
+            .by_name(EXE_NAME)
+            .with_context(|| format!("ダウンロードしたファイルに {EXE_NAME} が含まれていません"))?;
+        let new = exe.with_extension("exe.new");
+        {
+            let mut file = File::create(&new)
+                .with_context(|| format!("{} に書き込めません", new.display()))?;
+            io::copy(&mut entry, &mut file).context("新しい実行ファイルを書き出せません")?;
+        }
+
+        // 実行中の exe は上書きできないが名前は変えられるので、退避してから差し替える
+        let old = old_path(&exe);
+        let _ = fs::remove_file(&old);
+        fs::rename(&exe, &old).context("現在の実行ファイルを退避できません")?;
+        if let Err(e) = fs::rename(&new, &exe) {
+            let _ = fs::rename(&old, &exe);
+            let _ = fs::remove_file(&new);
+            return Err(e).context("新しい実行ファイルを配置できません");
+        }
+        Ok(exe)
+    }
+
+    pub fn relaunch(exe: &Path) -> Result<()> {
+        Command::new(exe)
+            .spawn()
+            .context("新しいバージョンを起動できません")?;
+        Ok(())
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+mod platform {
+    use std::path::{Path, PathBuf};
+
+    use anyhow::{Result, bail};
+
+    pub fn can_self_update() -> bool {
+        false
+    }
+
+    pub fn cleanup_previous() {}
+
+    pub fn install(_archive: &[u8]) -> Result<PathBuf> {
+        bail!("この OS は自動アップデートに対応していません")
+    }
+
+    pub fn relaunch(_path: &Path) -> Result<()> {
+        bail!("この OS は自動アップデートに対応していません")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_tag_with_or_without_prefix() {
+        assert_eq!(parse_tag("v1.2.3").unwrap(), Version::new(1, 2, 3));
+        assert_eq!(parse_tag("0.10.0").unwrap(), Version::new(0, 10, 0));
+        assert!(parse_tag("latest").is_err());
+    }
+
+    #[test]
+    fn compares_versions_semantically() {
+        assert!(parse_tag("v0.10.0").unwrap() > parse_tag("v0.9.0").unwrap());
+        assert!(parse_tag("v1.0.0").unwrap() > parse_tag("v1.0.0-rc.1").unwrap());
+    }
+
+    #[test]
+    fn finds_hash_in_sha256sums() {
+        let sums = "\
+aaa111  PingNotifier-0.2.0-macos-universal.zip
+bbb222 *PingNotifier-0.2.0-windows-x64.zip
+";
+        assert_eq!(
+            expected_hash(sums, "PingNotifier-0.2.0-macos-universal.zip"),
+            Some("aaa111")
+        );
+        assert_eq!(
+            expected_hash(sums, "PingNotifier-0.2.0-windows-x64.zip"),
+            Some("bbb222")
+        );
+        assert_eq!(expected_hash(sums, "PingNotifier-0.2.0"), None);
+    }
+
+    #[test]
+    fn sha256_matches_known_value() {
+        assert_eq!(
+            sha256_hex(b"hello world"),
+            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+        );
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[test]
+    fn selects_only_this_platforms_asset() {
+        let name = format!("PingNotifier-0.2.0{ASSET_SUFFIX}");
+        assert!(is_platform_asset(&name));
+        assert!(!is_platform_asset(SUMS_ASSET));
+        assert!(!is_platform_asset("PingNotifier-0.2.0-linux-x64.zip"));
+    }
+}

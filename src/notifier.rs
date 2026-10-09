@@ -4,7 +4,7 @@ use notify_rust::Notification;
 
 /// `Cargo.toml` の `[package.metadata.bundle] identifier` と一致させること
 #[cfg(target_os = "macos")]
-const BUNDLE_ID: &str = "com.novalumo.ping-notifier";
+pub(crate) const BUNDLE_ID: &str = "com.novalumo.ping-notifier";
 
 /// 通知の送り主となるアプリを設定する。他の通知より前に 1 度だけ呼ぶこと。
 ///

@@ -30,6 +30,10 @@ threshold = 1
 
 # 復旧時にも通知するか
 notify_recovery = true
+
+# 新しいバージョンを自動でインストールするか
+# false でもメニューの「アップデートを確認」から手動で更新できます
+auto_update = true
 "#;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -40,6 +44,7 @@ pub struct Config {
     pub timeout_ms: u64,
     pub threshold: u32,
     pub notify_recovery: bool,
+    pub auto_update: bool,
 }
 
 impl Default for Config {
@@ -50,6 +55,7 @@ impl Default for Config {
             timeout_ms: 1000,
             threshold: 1,
             notify_recovery: true,
+            auto_update: true,
         }
     }
 }
@@ -118,6 +124,7 @@ mod tests {
         assert_eq!(parsed.timeout_ms, default.timeout_ms);
         assert_eq!(parsed.threshold, default.threshold);
         assert_eq!(parsed.notify_recovery, default.notify_recovery);
+        assert_eq!(parsed.auto_update, default.auto_update);
     }
 
     #[test]
