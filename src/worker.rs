@@ -2,7 +2,7 @@
 
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::thread;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::config::Config;
 use crate::i18n::{Lang, Msg, t};
@@ -22,6 +22,8 @@ pub enum Status {
     Paused,
     Up {
         host: String,
+        /// 直近の応答時間（`ping` の出力から読み取れなかった場合は `None`）
+        rtt: Option<Duration>,
     },
     Down {
         host: String,
@@ -83,8 +85,8 @@ fn apply(cmd: Command, config: &mut Config, monitor: &mut Monitor, paused: &mut 
 
 fn check(config: &Config, monitor: &mut Monitor) -> Status {
     let host = config.host.clone();
-    let success = match ping::ping_once(&host, config.timeout()) {
-        Ok(success) => success,
+    let reply = match ping::ping_once(&host, config.timeout()) {
+        Ok(reply) => reply,
         Err(e) => {
             let message = format!("cannot run ping: {e}");
             log(&message);
@@ -92,11 +94,11 @@ fn check(config: &Config, monitor: &mut Monitor) -> Status {
         }
     };
 
-    if !success {
+    if reply.is_none() {
         log(&format!("{host}: timeout"));
     }
 
-    match monitor.record(success, Instant::now()) {
+    match monitor.record(reply.is_some(), Instant::now()) {
         Some(Event::Lost { consecutive }) => {
             let body = Msg::LostBody {
                 host: &host,
@@ -125,6 +127,9 @@ fn check(config: &Config, monitor: &mut Monitor) -> Status {
             consecutive: monitor.consecutive_failures(),
         }
     } else {
-        Status::Up { host }
+        Status::Up {
+            host,
+            rtt: reply.and_then(|r| r.rtt),
+        }
     }
 }
