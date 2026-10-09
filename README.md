@@ -6,6 +6,7 @@ A menu bar app (system tray app on Windows) that detects ping timeouts (packet l
 
 - The icon color shows the status: green = OK / red = packet loss / gray = paused / orange = cannot run ping
 - Shows the latest response time (RTT) in the menu and the tooltip
+- "Silent Mode" in the menu keeps monitoring (the icon color still changes) without sending notifications
 - Notifications are sent only when packet loss starts and when the connection is restored (no repeated notifications during an outage)
 - Updates itself automatically when a new version is released (see below)
 - "Launch at Login" can be toggled from the menu (macOS 13 or later / Windows)
