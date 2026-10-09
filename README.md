@@ -8,7 +8,7 @@ A menu bar app (system tray app on Windows) that detects ping timeouts (packet l
 - Notifications are sent only when packet loss starts and when the connection is restored (no repeated notifications during an outage)
 - Updates itself automatically when a new version is released (see below)
 - "Launch at Login" can be toggled from the menu (macOS 13 or later / Windows)
-- Available in English and Japanese (follows the OS language; can also be set explicitly)
+- Display languages: English, Japanese (follows the OS language; can also be set explicitly)
 
 ## Install with Homebrew (macOS)
 
@@ -148,11 +148,16 @@ A settings file is created at the following location on first launch. Edit it vi
 | `threshold` | `1` | Number of consecutive losses before notifying |
 | `notify_recovery` | `true` | Also notify when the connection is restored |
 | `auto_update` | `true` | Install new versions automatically |
-| `language` | `"auto"` | Display language: `"auto"` (follow the OS) / `"en"` / `"ja"` |
+| `language` | `"auto"` | Display language: `"auto"` (follow the OS) or a language code (see [Display language](#display-language)) |
 
 ## Display language
 
-The menu and notifications are available in English and Japanese. With `language = "auto"` (the default), the app goes through the OS preferred languages in order and uses the first supported one, falling back to English. You can also set `"en"` or `"ja"`; "Reload Settings" applies the change immediately.
+The menu and notifications are available in the languages below. With `language = "auto"` (the default), the app goes through the OS preferred languages in order and uses the first supported one, falling back to English. You can also set one of the codes below; "Reload Settings" applies the change immediately.
+
+| Language | `language` |
+| --- | --- |
+| English | `"en"` |
+| Japanese | `"ja"` |
 
 The comments in the settings file created on first launch are written in the display language at that time. Logs and error details are always in English.
 

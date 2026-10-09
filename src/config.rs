@@ -18,7 +18,7 @@ use crate::i18n::{self, Lang, LanguageSetting};
 const DEFAULT_CONFIG_EN: &str = r#"# Ping Notifier settings
 # After editing, choose "Reload Settings" from the menu to apply your changes.
 
-# Display language: "auto" (follow the OS), "en", or "ja"
+# Display language: "auto" (follow the OS) or one of "en", "ja"
 language = "auto"
 
 # Host name or IP address to monitor
@@ -45,7 +45,7 @@ auto_update = true
 const DEFAULT_CONFIG_JA: &str = r#"# Ping Notifier の設定
 # 変更後はメニューの「設定を再読み込み」で反映されます
 
-# 表示言語: "auto"（OS の言語に合わせる）、"en"、"ja"
+# 表示言語: "auto"（OS の言語に合わせる）または "en"、"ja"
 language = "auto"
 
 # 監視対象のホスト名または IP アドレス
