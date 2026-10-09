@@ -15,10 +15,11 @@ ping のタイムアウト（パケットロス）を検知して OS の通知�
 - `monitor.rs` — ping 結果の列から「ロス発生」「復旧」を判定する状態機械。副作用を持たない
 - `ping.rs` — OS 標準の `ping` コマンドを 1 回実行して疎通を判定する
 - `notifier.rs` — `notify-rust` による通知送信と、macOS での送り主（Bundle ID）設定
+- `updater.rs` — GitHub Releases からの自動アップデート（更新スレッド、検証、OS ごとの置き換えと再起動）
 - `config.rs` — 設定ファイルの読み込み・初回生成・検証
 - `icon.rs` — 状態アイコン（色付きの円）を実行時に RGBA で描画する
 
-スレッドは UI（メイン）と監視の 2 本。async ランタイムは導入していない。
+スレッドは UI（メイン）・監視・更新の 3 本。async ランタイムは導入していない。
 
 ## 開発ワークフロー
 
@@ -91,6 +92,18 @@ flake は devShell のみで、`nix build` 用の `packages` 出力はない。
 - 生成物（`icons/png/`、`icons/icon.ico`）もリポジトリに含めている（ビルドに ImageMagick 等を要求しないため）。アイコンを変えるときは `icons/icon.svg` を編集してスクリプトで再生成する
 - Windows の `.exe` へのアイコン埋め込みは `build.rs` が `winresource` で行う。対象 OS は `CARGO_CFG_TARGET_OS` で判定する（`cfg(windows)` はビルドホストの判定になるため使わない）
 
+### 自動アップデート
+
+- `updater.rs` は `api.github.com/repos/siraken/ping-notifier/releases/latest` を認証なしで読む。リポジトリが非公開だと 404 になり更新できない
+- 配布ファイル名（`PingNotifier-<ver>-macos-universal.zip` / `-windows-x64.zip`）と `SHA256SUMS` はアップデータとリリースワークフローの間の契約。どちらかを変えるときは両方を合わせること
+- 検証: `SHA256SUMS` のハッシュ照合に加え、macOS では Bundle ID・`codesign --verify --deep --strict`・（実行中のアプリが Developer ID 署名なら）同一 Team ID の要件を確認する。Windows は署名がないのでハッシュ照合のみ
+- macOS の置き換えは `.app` と同じディレクトリに `.ping-notifier-update/` を作り、`ditto` で展開して `rename` で入れ替える（同一ボリューム内で原子的に入れ替えるため）。署名済み `.app` の展開に `unzip` や `zip` クレートを使うと拡張属性やシンボリックリンクが崩れて署名が壊れるので `ditto` を使う
+- macOS の再起動は `/bin/sh` で自身の終了を待ってから `open` する（実行中に `open` すると既存プロセスが前面に出るだけ）
+- Windows は実行中の exe を上書きできないが名前は変えられるため、`ping-notifier.exe.old` に退避して差し替え、新しい exe を起動してから終了する。`.old` は次回起動時に `cleanup_previous` が消す
+- 開発ビルド（macOS で `.app` 外、Windows の debug ビルド）では置き換えず、ダウンロードページの案内にとどめる
+- 自動更新に失敗した版は、手動確認されるまで自動では再試行しない（失敗通知の繰り返しを防ぐ）
+- `cfg(target_os = "macos")` 内だけで使う関数を共通部分に置くと、Windows の CI で dead code として `-D warnings` に落ちる。OS 固有の補助関数は `platform` モジュール内に置くこと
+
 ## CI とリリース
 
 | ワークフロー | 契機 | 内容 |
@@ -102,7 +115,10 @@ flake は devShell のみで、`nix build` 用の `packages` 出力はない。
 - macOS は `aarch64` と `x86_64` を別々にビルドし、`cargo bundle --target aarch64-apple-darwin` で作った `.app` のバイナリを `lipo` で結合した universal バイナリに差し替えてから ad-hoc 署名する。差し替え後に署名し直さないと署名が壊れる
 - リリースはタグと `Cargo.toml` の `version` の一致を検証する。バージョンを上げるときは `Cargo.toml` を更新してからタグを打つ
 - Release 本文は `.github/release-notes.md`（インストール手順）に、GitHub の自動生成ノートを連結したもの
-- 署名・公証はしていない。正式に配布するなら Apple Developer ID での署名と notarization、Windows のコード署名が必要（シークレットの登録が要る）
+- macOS は Secrets（`MACOS_CERTIFICATE_P12` ほか。README 参照）が登録されていれば Developer ID 署名（ハードンドランタイム + タイムスタンプ）→ `notarytool` で公証 → `stapler` で添付する。未登録なら ad-hoc 署名で配布し、ワークフローに警告を出す
+- ワークフローの `if:` では `secrets` コンテキストを直接参照できないため、ジョブの `env` に移してから `env.X != ''` で判定している
+- Windows のコード署名はしていない（SmartScreen の警告が出る）
+- リリースジョブは配布ファイルから `SHA256SUMS` を生成して添付する。自動アップデートの検証に使う
 - `--locked` を付けているので、依存を変えたら `Cargo.lock` もコミットすること
 
 ## テスト方針
@@ -111,8 +127,9 @@ flake は devShell のみで、`nix build` 用の `packages` 出力はない。
 | --- | --- |
 | `src/monitor.rs::tests` | しきい値、1 回の障害につき通知 1 回、復旧時のロス回数と停止時間 |
 | `src/config.rs::tests` | `DEFAULT_CONFIG` と `Config::default()` の一致、不正値・未知キーの拒否 |
+| `src/updater.rs::tests` | タグのバージョン解釈と比較、`SHA256SUMS` の解析、SHA-256、OS ごとの配布ファイルの選択 |
 
-`ping.rs`・`notifier.rs`・UI は OS やネットワークに依存するため自動テストはない。変更したら実機で確認すること。macOS では `.app` を作って起動し、`192.0.2.1` を監視する設定で通知が出るかを見る。
+`ping.rs`・`notifier.rs`・UI・アップデートの置き換え処理は OS やネットワークに依存するため自動テストはない。変更したら実機で確認すること。macOS では `.app` を作って起動し、`192.0.2.1` を監視する設定で通知が出るかを見る。
 
 ## 未検証・既知の制約
 

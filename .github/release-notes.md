@@ -14,12 +14,16 @@
    - ターミナルで `xattr -dr com.apple.quarantine "/Applications/Ping Notifier.app"` を実行してもよい
 3. 初回の通知時に表示される通知許可ダイアログで「許可」を選ぶ
 
-アプリは Apple の公証（notarization）を受けていないため、手順 2 が必要になる。
+Apple の公証（notarization）を受けた版では手順 2 は不要。
 
 ### Windows
 
 1. zip を展開し、`ping-notifier.exe` を任意の場所に置いて実行する
 2. 「Windows によって PC が保護されました」と表示されたら「詳細情報」→「実行」を押す
+
+## アップデート
+
+一度インストールすれば、新しいバージョンは自動でインストールされる（メニューの「アップデートを確認」で手動確認も可能）。
 
 ## 設定
 
