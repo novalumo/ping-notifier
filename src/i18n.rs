@@ -132,6 +132,7 @@ pub enum Msg<'a> {
     // メニュー
     MenuStarting,
     MenuPause,
+    MenuSilent,
     MenuOpenConfig,
     MenuReloadConfig,
     MenuLaunchAtLogin,
@@ -195,6 +196,7 @@ impl Msg<'_> {
         match *self {
             Self::MenuStarting => "Starting…".into(),
             Self::MenuPause => "Pause".into(),
+            Self::MenuSilent => "Silent Mode (No Notifications)".into(),
             Self::MenuOpenConfig => "Open Settings File".into(),
             Self::MenuReloadConfig => "Reload Settings".into(),
             Self::MenuLaunchAtLogin => "Launch at Login".into(),
@@ -254,6 +256,7 @@ impl Msg<'_> {
         match *self {
             Self::MenuStarting => "起動中…".into(),
             Self::MenuPause => "一時停止".into(),
+            Self::MenuSilent => "サイレントモード（通知しない）".into(),
             Self::MenuOpenConfig => "設定ファイルを開く".into(),
             Self::MenuReloadConfig => "設定を再読み込み".into(),
             Self::MenuLaunchAtLogin => "ログイン時に起動".into(),
@@ -315,6 +318,7 @@ impl Msg<'_> {
         match *self {
             Self::MenuStarting => "正在启动…".into(),
             Self::MenuPause => "暂停".into(),
+            Self::MenuSilent => "静默模式（不发送通知）".into(),
             Self::MenuOpenConfig => "打开设置文件".into(),
             Self::MenuReloadConfig => "重新加载设置".into(),
             Self::MenuLaunchAtLogin => "登录时启动".into(),
@@ -372,6 +376,7 @@ impl Msg<'_> {
         match *self {
             Self::MenuStarting => "시작하는 중…".into(),
             Self::MenuPause => "일시 정지".into(),
+            Self::MenuSilent => "무음 모드 (알림 끄기)".into(),
             Self::MenuOpenConfig => "설정 파일 열기".into(),
             Self::MenuReloadConfig => "설정 다시 불러오기".into(),
             Self::MenuLaunchAtLogin => "로그인 시 실행".into(),
@@ -437,6 +442,7 @@ impl Msg<'_> {
         match *self {
             Self::MenuStarting => "Lanĉiĝas…".into(),
             Self::MenuPause => "Paŭzi".into(),
+            Self::MenuSilent => "Silenta reĝimo (sen sciigoj)".into(),
             Self::MenuOpenConfig => "Malfermi agordan dosieron".into(),
             Self::MenuReloadConfig => "Reŝargi agordojn".into(),
             Self::MenuLaunchAtLogin => "Lanĉi ĉe ensaluto".into(),
@@ -498,6 +504,7 @@ impl Msg<'_> {
         match *self {
             Self::MenuStarting => "Wird gestartet …".into(),
             Self::MenuPause => "Pausieren".into(),
+            Self::MenuSilent => "Stiller Modus (keine Benachrichtigungen)".into(),
             Self::MenuOpenConfig => "Einstellungsdatei öffnen".into(),
             Self::MenuReloadConfig => "Einstellungen neu laden".into(),
             Self::MenuLaunchAtLogin => "Beim Anmelden starten".into(),

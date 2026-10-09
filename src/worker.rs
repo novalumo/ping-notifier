@@ -13,6 +13,8 @@ use crate::{log, notifier, ping};
 #[derive(Debug)]
 pub enum Command {
     SetPaused(bool),
+    /// サイレントモード。監視とアイコンの更新は続け、ロス・復旧の通知だけ止める
+    SetSilent(bool),
     Reload(Config),
 }
 
@@ -48,6 +50,7 @@ pub fn spawn(config: Config, on_status: impl Fn(Status) + Send + 'static) -> Sen
 fn run(mut config: Config, rx: &Receiver<Command>, on_status: &dyn Fn(Status)) {
     let mut monitor = Monitor::new(config.threshold);
     let mut paused = false;
+    let mut silent = false;
 
     loop {
         let started = Instant::now();
@@ -56,34 +59,45 @@ fn run(mut config: Config, rx: &Receiver<Command>, on_status: &dyn Fn(Status)) {
             on_status(Status::Paused);
             // 一時停止中は指示が来るまで待つ
             match rx.recv() {
-                Ok(cmd) => apply(cmd, &mut config, &mut monitor, &mut paused),
+                Ok(cmd) => apply(cmd, &mut config, &mut monitor, &mut paused, &mut silent),
                 Err(_) => return,
             }
             continue;
         }
 
-        on_status(check(&config, &mut monitor));
+        on_status(check(&config, &mut monitor, silent));
 
         // 次の ping までの間も指示を受け付け、届いたらすぐ反映する
         let remaining = (started + config.interval()).saturating_duration_since(Instant::now());
         match rx.recv_timeout(remaining) {
-            Ok(cmd) => apply(cmd, &mut config, &mut monitor, &mut paused),
+            Ok(cmd) => apply(cmd, &mut config, &mut monitor, &mut paused, &mut silent),
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => return,
         }
     }
 }
 
-fn apply(cmd: Command, config: &mut Config, monitor: &mut Monitor, paused: &mut bool) {
+fn apply(
+    cmd: Command,
+    config: &mut Config,
+    monitor: &mut Monitor,
+    paused: &mut bool,
+    silent: &mut bool,
+) {
     match cmd {
         Command::SetPaused(p) => *paused = p,
         Command::Reload(new) => *config = new,
+        // 通知するかどうかだけの切り替えなので、監視の状態はそのまま引き継ぐ
+        Command::SetSilent(s) => {
+            *silent = s;
+            return;
+        }
     }
     // 設定や一時停止の切り替えをまたいでロス回数を持ち越さない
     *monitor = Monitor::new(config.threshold);
 }
 
-fn check(config: &Config, monitor: &mut Monitor) -> Status {
+fn check(config: &Config, monitor: &mut Monitor, silent: bool) -> Status {
     let host = config.host.clone();
     let reply = match ping::ping_once(&host, config.timeout()) {
         Ok(reply) => reply,
@@ -105,7 +119,9 @@ fn check(config: &Config, monitor: &mut Monitor) -> Status {
                 consecutive,
             };
             log(&format!("[lost] {}", body.in_lang(Lang::En)));
-            notifier::notify(&t(Msg::LostTitle), &t(body));
+            if !silent {
+                notifier::notify(&t(Msg::LostTitle), &t(body));
+            }
         }
         Some(Event::Recovered { lost, downtime }) => {
             let body = Msg::RecoveredBody {
@@ -114,7 +130,7 @@ fn check(config: &Config, monitor: &mut Monitor) -> Status {
                 secs: downtime.as_secs(),
             };
             log(&format!("[recovered] {}", body.in_lang(Lang::En)));
-            if config.notify_recovery {
+            if config.notify_recovery && !silent {
                 notifier::notify(&t(Msg::RecoveredTitle), &t(body));
             }
         }
