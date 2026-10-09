@@ -1,2 +1,8 @@
 /target
 .direnv/
+
+# 署名用の鍵・証明書（1Password と GitHub Secrets で管理し、リポジトリには置かない）
+*.p12
+*.p8
+*.cer
+*.certSigningRequest
