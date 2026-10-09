@@ -48,8 +48,7 @@ Versions that are not signed and notarized show an OS warning on first launch. S
 
 1. Update `version` in `Cargo.toml` and commit
 2. Push a tag with the same version (e.g. `git tag v0.2.0 && git push origin v0.2.0`)
-3. `.github/workflows/release.yml` builds for macOS and Windows and creates a GitHub Release
-4. Update `version` and `sha256` in `Casks/ping-notifier.rb` of [novalumo/homebrew-tap](https://github.com/novalumo/homebrew-tap) (the hash of the macOS zip is in `SHA256SUMS`)
+3. `.github/workflows/release.yml` builds for macOS and Windows, creates a GitHub Release, and updates `Casks/ping-notifier.rb` in [novalumo/homebrew-tap](https://github.com/novalumo/homebrew-tap) (see below)
 
 The workflow fails if the tag does not match `version` in `Cargo.toml`. Running it manually (workflow_dispatch) from the Actions page builds without creating a release; the build outputs are available as artifacts of the run.
 
@@ -92,6 +91,27 @@ gh secret set APPLE_API_ISSUER_ID --body xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 ```
 
 An ad-hoc signed version can update to a Developer ID signed version. Once the app is Developer ID signed, it only accepts versions signed by the same Team ID.
+
+## Homebrew cask updates (for releases)
+
+After a release is published, the workflow updates `version`, `sha256`, and `url` in `Casks/ping-notifier.rb` of [novalumo/homebrew-tap](https://github.com/novalumo/homebrew-tap) and pushes the change. It writes to the tap with a GitHub App token. If the following secrets are not set, the step is skipped with a warning and the cask must be updated by hand.
+
+| Secret | Contents |
+| --- | --- |
+| `HOMEBREW_TAP_APP_CLIENT_ID` | Client ID of the GitHub App |
+| `HOMEBREW_TAP_APP_PRIVATE_KEY` | Private key (`.pem`) of the GitHub App |
+
+Setup:
+
+1. Create a GitHub App in the novalumo organization settings (Developer settings → GitHub Apps). Turn off Webhook and grant only Repository permissions → Contents: Read and write
+2. Generate a private key and download the `.pem`
+3. Install the app on the novalumo organization, limited to `homebrew-tap`
+4. Register them with GitHub:
+
+```bash
+gh secret set HOMEBREW_TAP_APP_CLIENT_ID --body Iv23xxxxxxxxxxxxxxxx
+gh secret set HOMEBREW_TAP_APP_PRIVATE_KEY < app-name.2026-10-09.private-key.pem
+```
 
 ## Build
 

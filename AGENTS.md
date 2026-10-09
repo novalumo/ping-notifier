@@ -140,7 +140,7 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 | ワークフロー | 契機 | 内容 |
 | --- | --- | --- |
 | `.github/workflows/ci.yml` | main への push、PR | macOS / Windows で `fmt --check`・`clippy -D warnings`・`test` |
-| `.github/workflows/release.yml` | `v*` タグの push、手動実行 | macOS（Apple Silicon）の `.app` と Windows x64 `.exe` を zip 化。タグ時のみ GitHub Release を作成 |
+| `.github/workflows/release.yml` | `v*` タグの push、手動実行 | macOS（Apple Silicon）の `.app` と Windows x64 `.exe` を zip 化。タグ時のみ GitHub Release を作成し、Homebrew の Cask を更新 |
 
 - CI は Nix を使わず `dtolnay/rust-toolchain@stable` を使う（Windows ランナーで Nix が使えないため）。`cargo-bundle` は `cargo install` で入れる
 - macOS は Apple Silicon（`aarch64-apple-darwin`）のみ。Intel Mac は今後廃止されるため対応しない（v0.4.0 までは `lipo` で結合した universal を `-macos-universal.zip` として配布していた）。`cargo bundle` は `--locked` を受け付けないので、先に `cargo build --locked` しておく
@@ -152,7 +152,9 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 - ワークフローの `if:` では `secrets` コンテキストを直接参照できないため、ジョブの `env` に移してから `env.X != ''` で判定している
 - Windows のコード署名はしていない（SmartScreen の警告が出る）
 - リリースジョブは配布ファイルから `SHA256SUMS` を生成して添付する。自動アップデートの検証に使う
-- Homebrew の Cask は別リポジトリ [novalumo/homebrew-tap](https://github.com/novalumo/homebrew-tap) の `Casks/ping-notifier.rb`。リリース後に `version` と `sha256`（macOS の zip）を手で更新する。配布ファイル名を変えるときは Cask の `url` も合わせること
+- Homebrew の Cask は別リポジトリ [novalumo/homebrew-tap](https://github.com/novalumo/homebrew-tap) の `Casks/ping-notifier.rb`。リリースジョブの後に `homebrew` ジョブが `version`・`sha256`・`url` を `sed` で書き換えて push する。`url` はジョブ内に直書きしているので、配布ファイル名を変えるときはここも合わせること。Cask の書式（2 スペースのインデントで `version "..."` など 1 行）を変えると置換が効かなくなるが、`grep -qxF` で検出してジョブを失敗させる
+- tap への書き込みは GitHub App（`actions/create-github-app-token`、`client-id` と秘密鍵をシークレットに登録）のトークンで行う。個人の PAT に依存せず、権限を `homebrew-tap` の Contents に絞れるため。シークレットが未登録なら警告を出してスキップする
+- actionlint の同梱定義が古く、`create-github-app-token@v3` の `client-id` を未定義と誤検出する。`-ignore 'create-github-app-token'` で抑制してよい
 - `--locked` を付けているので、依存を変えたら `Cargo.lock` もコミットすること
 
 ## テスト方針
