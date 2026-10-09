@@ -9,6 +9,7 @@ pub const GREEN: [u8; 3] = [0x34, 0xc7, 0x59];
 pub const RED: [u8; 3] = [0xff, 0x3b, 0x30];
 pub const GRAY: [u8; 3] = [0x8e, 0x8e, 0x93];
 pub const ORANGE: [u8; 3] = [0xff, 0x95, 0x00];
+pub const YELLOW: [u8; 3] = [0xff, 0xcc, 0x00];
 
 /// 縁をアンチエイリアスした円のアイコンを作る
 pub fn circle([r, g, b]: [u8; 3]) -> Icon {

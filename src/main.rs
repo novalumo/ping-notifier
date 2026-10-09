@@ -336,11 +336,15 @@ fn toggle_autostart(item: &CheckMenuItem) {
 fn describe(status: &Status) -> ([u8; 3], String) {
     match status {
         Status::Paused => (icon::GRAY, t(Msg::StatusPaused)),
-        Status::Up { host, rtt: None } => (icon::GREEN, t(Msg::StatusUp { host })),
-        Status::Up {
-            host,
-            rtt: Some(rtt),
-        } => (icon::GREEN, t(Msg::StatusUpRtt { host, rtt: *rtt })),
+        Status::Up { host, rtt, slow } => {
+            let text = match (*slow, *rtt) {
+                (false, None) => t(Msg::StatusUp { host }),
+                (false, Some(rtt)) => t(Msg::StatusUpRtt { host, rtt }),
+                (true, None) => t(Msg::StatusSlow { host }),
+                (true, Some(rtt)) => t(Msg::StatusSlowRtt { host, rtt }),
+            };
+            (if *slow { icon::YELLOW } else { icon::GREEN }, text)
+        }
         Status::Down { host, consecutive } => (
             icon::RED,
             t(Msg::StatusDown {

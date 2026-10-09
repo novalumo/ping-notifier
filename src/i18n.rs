@@ -146,6 +146,8 @@ pub enum Msg<'a> {
     StatusPaused,
     StatusUp { host: &'a str },
     StatusUpRtt { host: &'a str, rtt: Duration },
+    StatusSlow { host: &'a str },
+    StatusSlowRtt { host: &'a str, rtt: Duration },
     StatusDown { host: &'a str, consecutive: u32 },
     StatusPingError { host: &'a str },
 
@@ -154,6 +156,10 @@ pub enum Msg<'a> {
     LostBody { host: &'a str, consecutive: u32 },
     RecoveredTitle,
     RecoveredBody { host: &'a str, lost: u32, secs: u64 },
+    LatencyHighTitle,
+    LatencyHighBody { host: &'a str, rtt: Duration },
+    LatencyNormalTitle,
+    LatencyNormalBody { host: &'a str, secs: u64 },
 
     // 通知: アップデート
     UpdateCheckFailedTitle,
@@ -209,6 +215,8 @@ impl Msg<'_> {
             Self::StatusPaused => "Paused".into(),
             Self::StatusUp { host } => format!("{host}: OK"),
             Self::StatusUpRtt { host, rtt } => format!("{host}: OK ({})", rtt_text(rtt)),
+            Self::StatusSlow { host } => format!("{host}: slow"),
+            Self::StatusSlowRtt { host, rtt } => format!("{host}: slow ({})", rtt_text(rtt)),
             Self::StatusDown { host, consecutive } => {
                 format!("{host}: no response ({consecutive} in a row)")
             }
@@ -221,6 +229,14 @@ impl Msg<'_> {
             Self::RecoveredTitle => "Connection restored".into(),
             Self::RecoveredBody { host, lost, secs } => {
                 format!("{host} is reachable again (lost {lost}, about {secs}s)")
+            }
+            Self::LatencyHighTitle => "High latency detected".into(),
+            Self::LatencyHighBody { host, rtt } => {
+                format!("Response time from {host} is high ({})", rtt_text(rtt))
+            }
+            Self::LatencyNormalTitle => "Latency back to normal".into(),
+            Self::LatencyNormalBody { host, secs } => {
+                format!("Response time from {host} is back to normal (about {secs}s)")
             }
 
             Self::UpdateCheckFailedTitle => "Couldn't check for updates".into(),
@@ -269,6 +285,8 @@ impl Msg<'_> {
             Self::StatusPaused => "一時停止中".into(),
             Self::StatusUp { host } => format!("{host}: 正常"),
             Self::StatusUpRtt { host, rtt } => format!("{host}: 正常（{}）", rtt_text(rtt)),
+            Self::StatusSlow { host } => format!("{host}: 遅延"),
+            Self::StatusSlowRtt { host, rtt } => format!("{host}: 遅延（{}）", rtt_text(rtt)),
             Self::StatusDown { host, consecutive } => {
                 format!("{host}: 応答なし（{consecutive} 回連続）")
             }
@@ -281,6 +299,14 @@ impl Msg<'_> {
             Self::RecoveredTitle => "疎通が復旧".into(),
             Self::RecoveredBody { host, lost, secs } => {
                 format!("{host} への疎通が復旧しました（ロス {lost} 回 / 約 {secs} 秒）")
+            }
+            Self::LatencyHighTitle => "遅延を検知".into(),
+            Self::LatencyHighBody { host, rtt } => {
+                format!("{host} の応答時間が長くなっています（{}）", rtt_text(rtt))
+            }
+            Self::LatencyNormalTitle => "遅延が解消".into(),
+            Self::LatencyNormalBody { host, secs } => {
+                format!("{host} の応答時間が元に戻りました（約 {secs} 秒）")
             }
 
             Self::UpdateCheckFailedTitle => "アップデートを確認できませんでした".into(),
@@ -331,6 +357,8 @@ impl Msg<'_> {
             Self::StatusPaused => "已暂停".into(),
             Self::StatusUp { host } => format!("{host}: 正常"),
             Self::StatusUpRtt { host, rtt } => format!("{host}: 正常（{}）", rtt_text(rtt)),
+            Self::StatusSlow { host } => format!("{host}: 延迟高"),
+            Self::StatusSlowRtt { host, rtt } => format!("{host}: 延迟高（{}）", rtt_text(rtt)),
             Self::StatusDown { host, consecutive } => {
                 format!("{host}: 无响应（连续 {consecutive} 次）")
             }
@@ -343,6 +371,14 @@ impl Msg<'_> {
             Self::RecoveredTitle => "连接已恢复".into(),
             Self::RecoveredBody { host, lost, secs } => {
                 format!("与 {host} 的连接已恢复（丢包 {lost} 次，约 {secs} 秒）")
+            }
+            Self::LatencyHighTitle => "检测到高延迟".into(),
+            Self::LatencyHighBody { host, rtt } => {
+                format!("{host} 的响应时间变长（{}）", rtt_text(rtt))
+            }
+            Self::LatencyNormalTitle => "延迟已恢复正常".into(),
+            Self::LatencyNormalBody { host, secs } => {
+                format!("{host} 的响应时间已恢复正常（约 {secs} 秒）")
             }
 
             Self::UpdateCheckFailedTitle => "无法检查更新".into(),
@@ -391,6 +427,8 @@ impl Msg<'_> {
             Self::StatusPaused => "일시 정지됨".into(),
             Self::StatusUp { host } => format!("{host}: 정상"),
             Self::StatusUpRtt { host, rtt } => format!("{host}: 정상 ({})", rtt_text(rtt)),
+            Self::StatusSlow { host } => format!("{host}: 지연"),
+            Self::StatusSlowRtt { host, rtt } => format!("{host}: 지연 ({})", rtt_text(rtt)),
             Self::StatusDown { host, consecutive } => {
                 format!("{host}: 응답 없음 ({consecutive}회 연속)")
             }
@@ -403,6 +441,14 @@ impl Msg<'_> {
             Self::RecoveredTitle => "연결 복구됨".into(),
             Self::RecoveredBody { host, lost, secs } => {
                 format!("{host} 연결이 복구되었습니다. (손실 {lost}회, 약 {secs}초)")
+            }
+            Self::LatencyHighTitle => "지연 감지".into(),
+            Self::LatencyHighBody { host, rtt } => {
+                format!("{host}의 응답 시간이 길어졌습니다. ({})", rtt_text(rtt))
+            }
+            Self::LatencyNormalTitle => "지연 해소됨".into(),
+            Self::LatencyNormalBody { host, secs } => {
+                format!("{host}의 응답 시간이 정상으로 돌아왔습니다. (약 {secs}초)")
             }
 
             Self::UpdateCheckFailedTitle => "업데이트를 확인할 수 없습니다".into(),
@@ -455,6 +501,8 @@ impl Msg<'_> {
             Self::StatusPaused => "Paŭzita".into(),
             Self::StatusUp { host } => format!("{host}: en ordo"),
             Self::StatusUpRtt { host, rtt } => format!("{host}: en ordo ({})", rtt_text(rtt)),
+            Self::StatusSlow { host } => format!("{host}: malrapida"),
+            Self::StatusSlowRtt { host, rtt } => format!("{host}: malrapida ({})", rtt_text(rtt)),
             Self::StatusDown { host, consecutive } => {
                 format!("{host}: neniu respondo ({consecutive} sinsekve)")
             }
@@ -467,6 +515,14 @@ impl Msg<'_> {
             Self::RecoveredTitle => "Konekto restarigita".into(),
             Self::RecoveredBody { host, lost, secs } => {
                 format!("{host} denove atingeblas (perditaj: {lost}, ĉirkaŭ {secs} s)")
+            }
+            Self::LatencyHighTitle => "Alta latenco detektita".into(),
+            Self::LatencyHighBody { host, rtt } => {
+                format!("La respondtempo de {host} estas alta ({})", rtt_text(rtt))
+            }
+            Self::LatencyNormalTitle => "Latenco revenis al normalo".into(),
+            Self::LatencyNormalBody { host, secs } => {
+                format!("La respondtempo de {host} revenis al normalo (ĉirkaŭ {secs} s)")
             }
 
             Self::UpdateCheckFailedTitle => "Ne eblis serĉi ĝisdatigojn".into(),
@@ -519,6 +575,8 @@ impl Msg<'_> {
             Self::StatusPaused => "Pausiert".into(),
             Self::StatusUp { host } => format!("{host}: OK"),
             Self::StatusUpRtt { host, rtt } => format!("{host}: OK ({})", rtt_text(rtt)),
+            Self::StatusSlow { host } => format!("{host}: langsam"),
+            Self::StatusSlowRtt { host, rtt } => format!("{host}: langsam ({})", rtt_text(rtt)),
             Self::StatusDown { host, consecutive } => {
                 format!("{host}: keine Antwort ({consecutive}-mal in Folge)")
             }
@@ -531,6 +589,14 @@ impl Msg<'_> {
             Self::RecoveredTitle => "Verbindung wiederhergestellt".into(),
             Self::RecoveredBody { host, lost, secs } => {
                 format!("{host} ist wieder erreichbar ({lost} verloren, etwa {secs} s)")
+            }
+            Self::LatencyHighTitle => "Hohe Latenz erkannt".into(),
+            Self::LatencyHighBody { host, rtt } => {
+                format!("Die Antwortzeit von {host} ist hoch ({})", rtt_text(rtt))
+            }
+            Self::LatencyNormalTitle => "Latenz wieder normal".into(),
+            Self::LatencyNormalBody { host, secs } => {
+                format!("Die Antwortzeit von {host} ist wieder normal (etwa {secs} s)")
             }
 
             Self::UpdateCheckFailedTitle => "Suche nach Updates fehlgeschlagen".into(),
@@ -642,6 +708,13 @@ mod tests {
             rtt: Duration::from_micros(450),
         };
         assert_eq!(msg.in_lang(Lang::En), "8.8.8.8: OK (<1 ms)");
+
+        let msg = Msg::StatusSlowRtt {
+            host: "8.8.8.8",
+            rtt: Duration::from_millis(350),
+        };
+        assert_eq!(msg.in_lang(Lang::En), "8.8.8.8: slow (350 ms)");
+        assert_eq!(msg.in_lang(Lang::Ja), "8.8.8.8: 遅延（350 ms）");
 
         let (from, to) = (Version::new(0, 5, 0), Version::new(0, 5, 1));
         let msg = Msg::UpdatedBody {

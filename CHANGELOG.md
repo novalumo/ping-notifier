@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Notify when the response time stays above a threshold (`latency_threshold_ms`, `latency_consecutive`). Disabled by default. While latency is high, the icon turns yellow. Silent Mode also suppresses these notifications
+
 ## [0.8.0] - 2026-10-09
 
 ### Added
