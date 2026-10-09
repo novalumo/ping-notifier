@@ -20,7 +20,9 @@ pub fn init() {
         "com.apple.Terminal"
     };
     if let Err(e) = notify_rust::set_application(id) {
-        crate::log(&format!("通知の送り主を {id} に設定できませんでした: {e}"));
+        crate::log(&format!(
+            "failed to set the notification sender to {id}: {e}"
+        ));
     }
 }
 
@@ -42,6 +44,6 @@ pub fn notify(summary: &str, body: &str) {
         .body(body)
         .show()
     {
-        crate::log(&format!("通知の送信に失敗しました: {e}"));
+        crate::log(&format!("failed to send a notification: {e}"));
     }
 }

@@ -24,5 +24,5 @@ pub fn circle([r, g, b]: [u8; 3]) -> Icon {
             rgba.extend_from_slice(&[r, g, b, (alpha * 255.0) as u8]);
         }
     }
-    Icon::from_rgba(rgba, SIZE, SIZE).expect("アイコンのサイズが不正です")
+    Icon::from_rgba(rgba, SIZE, SIZE).expect("invalid icon size")
 }

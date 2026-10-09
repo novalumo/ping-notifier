@@ -5,6 +5,7 @@ use std::thread;
 use std::time::Instant;
 
 use crate::config::Config;
+use crate::i18n::{Lang, Msg, t};
 use crate::monitor::{Event, Monitor};
 use crate::{log, notifier, ping};
 
@@ -38,7 +39,7 @@ pub fn spawn(config: Config, on_status: impl Fn(Status) + Send + 'static) -> Sen
     thread::Builder::new()
         .name("ping-worker".into())
         .spawn(move || run(config, &rx, &on_status))
-        .expect("監視スレッドを起動できませんでした");
+        .expect("failed to spawn the ping worker thread");
     tx
 }
 
@@ -85,7 +86,7 @@ fn check(config: &Config, monitor: &mut Monitor) -> Status {
     let success = match ping::ping_once(&host, config.timeout()) {
         Ok(success) => success,
         Err(e) => {
-            let message = format!("ping コマンドを実行できません: {e}");
+            let message = format!("cannot run ping: {e}");
             log(&message);
             return Status::Error { host, message };
         }
@@ -97,18 +98,22 @@ fn check(config: &Config, monitor: &mut Monitor) -> Status {
 
     match monitor.record(success, Instant::now()) {
         Some(Event::Lost { consecutive }) => {
-            let body = format!("{host} から {consecutive} 回連続で応答がありません");
-            log(&format!("[通知] {body}"));
-            notifier::notify("パケットロスを検知", &body);
+            let body = Msg::LostBody {
+                host: &host,
+                consecutive,
+            };
+            log(&format!("[lost] {}", body.in_lang(Lang::En)));
+            notifier::notify(&t(Msg::LostTitle), &t(body));
         }
         Some(Event::Recovered { lost, downtime }) => {
-            let body = format!(
-                "{host} への疎通が復旧しました（ロス {lost} 回 / 約 {} 秒）",
-                downtime.as_secs()
-            );
-            log(&format!("[復旧] {body}"));
+            let body = Msg::RecoveredBody {
+                host: &host,
+                lost,
+                secs: downtime.as_secs(),
+            };
+            log(&format!("[recovered] {}", body.in_lang(Lang::En)));
             if config.notify_recovery {
-                notifier::notify("疎通が復旧", &body);
+                notifier::notify(&t(Msg::RecoveredTitle), &t(body));
             }
         }
         None => {}

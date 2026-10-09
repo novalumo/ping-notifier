@@ -100,7 +100,7 @@ mod platform {
     }
 
     fn command() -> Result<String> {
-        let exe = std::env::current_exe().context("実行ファイルの場所が分かりません")?;
+        let exe = std::env::current_exe().context("cannot determine the executable path")?;
         Ok(run_command(&exe))
     }
 
@@ -122,13 +122,13 @@ mod platform {
     pub fn set_enabled(enabled: bool) -> Result<()> {
         let key = CURRENT_USER
             .create(RUN_KEY)
-            .context("自動起動の設定を開けません")?;
+            .context("cannot open the Run registry key")?;
         if enabled {
             key.set_string(VALUE_NAME, command()?)
-                .context("自動起動を登録できません")?;
+                .context("cannot register the startup entry")?;
         } else if key.get_string(VALUE_NAME).is_ok() {
             key.remove_value(VALUE_NAME)
-                .context("自動起動を解除できません")?;
+                .context("cannot remove the startup entry")?;
         }
         Ok(())
     }
@@ -171,7 +171,7 @@ mod platform {
     }
 
     pub fn set_enabled(_enabled: bool) -> Result<()> {
-        bail!("この OS は自動起動の設定に対応していません")
+        bail!("launch at login is not supported on this OS")
     }
 
     pub fn open_system_settings() {}

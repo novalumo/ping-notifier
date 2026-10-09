@@ -13,6 +13,7 @@ use semver::Version;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
+use crate::i18n::{Msg, t};
 use crate::{log, notifier};
 
 const REPO: &str = "siraken/ping-notifier";
@@ -64,7 +65,7 @@ struct Asset {
 }
 
 pub fn current_version() -> Version {
-    Version::parse(env!("CARGO_PKG_VERSION")).expect("Cargo.toml の version は semver")
+    Version::parse(env!("CARGO_PKG_VERSION")).expect("Cargo.toml version must be semver")
 }
 
 pub fn spawn(auto: bool, on_event: impl Fn(UpdateEvent) + Send + 'static) -> Sender<UpdateCommand> {
@@ -72,7 +73,7 @@ pub fn spawn(auto: bool, on_event: impl Fn(UpdateEvent) + Send + 'static) -> Sen
     thread::Builder::new()
         .name("updater".into())
         .spawn(move || run(auto, &rx, &on_event))
-        .expect("更新スレッドを起動できませんでした");
+        .expect("failed to spawn the updater thread");
     tx
 }
 
@@ -106,18 +107,23 @@ fn check_and_apply(manual: bool, failed: &mut Option<Version>, on_event: &dyn Fn
     let (release, latest) = match fetch_latest() {
         Ok(found) => found,
         Err(e) => {
-            log(&format!("アップデートを確認できませんでした: {e:#}"));
+            log(&format!("failed to check for updates: {e:#}"));
             if manual {
-                notifier::notify("アップデートを確認できませんでした", &format!("{e:#}"));
+                notifier::notify(&t(Msg::UpdateCheckFailedTitle), &format!("{e:#}"));
             }
             return;
         }
     };
 
     if latest <= current {
-        log(&format!("最新版です（現在 v{current} / 最新 v{latest}）"));
+        log(&format!(
+            "up to date (current v{current} / latest v{latest})"
+        ));
         if manual {
-            notifier::notify("最新版です", &format!("v{current} は最新版です"));
+            notifier::notify(
+                &t(Msg::UpToDateTitle),
+                &t(Msg::UpToDateBody { version: &current }),
+            );
         }
         return;
     }
@@ -131,20 +137,20 @@ fn check_and_apply(manual: bool, failed: &mut Option<Version>, on_event: &dyn Fn
     };
     if !can_self_update() {
         notifier::notify(
-            "新しいバージョンがあります",
-            &format!("v{latest} が公開されています。メニューからダウンロードできます"),
+            &t(Msg::UpdateAvailableTitle),
+            &t(Msg::UpdateAvailableBody { version: &latest }),
         );
         on_event(available);
         return;
     }
 
-    log(&format!("v{latest} をインストールします"));
+    log(&format!("installing v{latest}"));
     match install(&release) {
         Ok(relaunch) => {
-            log(&format!("v{latest} をインストールしました"));
+            log(&format!("installed v{latest}"));
             notifier::notify(
-                "アップデートしました",
-                &format!("v{latest} に更新しました。再起動します"),
+                &t(Msg::UpdatedTitle),
+                &t(Msg::UpdatedBody { version: &latest }),
             );
             on_event(UpdateEvent::Installed {
                 version: latest,
@@ -152,10 +158,10 @@ fn check_and_apply(manual: bool, failed: &mut Option<Version>, on_event: &dyn Fn
             });
         }
         Err(e) => {
-            log(&format!("v{latest} のインストールに失敗しました: {e:#}"));
+            log(&format!("failed to install v{latest}: {e:#}"));
             notifier::notify(
-                "アップデートに失敗しました",
-                &format!("{e:#}\nメニューからダウンロードページを開けます"),
+                &t(Msg::UpdateFailedTitle),
+                &format!("{e:#}\n{}", t(Msg::UpdateFailedHint)),
             );
             *failed = Some(latest);
             on_event(available);
@@ -194,10 +200,10 @@ fn fetch_latest() -> Result<(Release, Version)> {
         .header("Accept", "application/vnd.github+json")
         .header("User-Agent", USER_AGENT)
         .call()
-        .context("GitHub に接続できません")?
+        .context("cannot connect to GitHub")?
         .body_mut()
         .read_json()
-        .context("リリース情報を読めません")?;
+        .context("cannot read the release information")?;
     let version = parse_tag(&release.tag_name)?;
     Ok((release, version))
 }
@@ -207,12 +213,12 @@ fn download(url: &str) -> Result<Vec<u8>> {
         .get(url)
         .header("User-Agent", USER_AGENT)
         .call()
-        .with_context(|| format!("{url} をダウンロードできません"))?
+        .with_context(|| format!("cannot download {url}"))?
         .body_mut()
         .with_config()
         .limit(MAX_DOWNLOAD_BYTES)
         .read_to_vec()
-        .with_context(|| format!("{url} をダウンロードできません"))
+        .with_context(|| format!("cannot download {url}"))
 }
 
 /// ダウンロードと検証を行い、実行中のアプリを置き換える。戻り値は再起動に使うパス
@@ -221,23 +227,23 @@ fn install(release: &Release) -> Result<PathBuf> {
         .assets
         .iter()
         .find(|a| is_platform_asset(&a.name))
-        .context("この OS 向けのファイルがリリースにありません")?;
+        .context("the release has no file for this OS")?;
     let sums_asset = release
         .assets
         .iter()
         .find(|a| a.name == SUMS_ASSET)
-        .context("リリースに SHA256SUMS がないため検証できません")?;
+        .context("the release has no SHA256SUMS to verify against")?;
 
     let sums = String::from_utf8(download(&sums_asset.browser_download_url)?)
-        .context("SHA256SUMS の形式が正しくありません")?;
+        .context("SHA256SUMS is not valid UTF-8")?;
     let expected = expected_hash(&sums, &asset.name)
-        .with_context(|| format!("SHA256SUMS に {} の記載がありません", asset.name))?;
+        .with_context(|| format!("SHA256SUMS has no entry for {}", asset.name))?;
 
     let archive = download(&asset.browser_download_url)?;
     let actual = sha256_hex(&archive);
     ensure!(
         actual.eq_ignore_ascii_case(expected),
-        "{} のハッシュが一致しません（期待値 {expected} / 実際 {actual}）",
+        "hash mismatch for {} (expected {expected}, got {actual})",
         asset.name
     );
 
@@ -246,7 +252,7 @@ fn install(release: &Release) -> Result<PathBuf> {
 
 fn parse_tag(tag: &str) -> Result<Version> {
     Version::parse(tag.trim_start_matches('v'))
-        .with_context(|| format!("タグ {tag} をバージョンとして解釈できません"))
+        .with_context(|| format!("cannot parse tag {tag} as a version"))
 }
 
 fn is_platform_asset(name: &str) -> bool {
@@ -283,10 +289,10 @@ mod platform {
     fn run_checked(cmd: &mut Command) -> Result<Output> {
         let output = cmd
             .output()
-            .with_context(|| format!("{cmd:?} を実行できません"))?;
+            .with_context(|| format!("cannot run {cmd:?}"))?;
         if !output.status.success() {
             bail!(
-                "{cmd:?} が失敗しました: {}",
+                "{cmd:?} failed: {}",
                 String::from_utf8_lossy(&output.stderr).trim()
             );
         }
@@ -314,12 +320,12 @@ mod platform {
     }
 
     pub fn install(archive: &[u8]) -> Result<PathBuf> {
-        let app = current_app().context(".app から起動されていません")?;
+        let app = current_app().context("not running from an .app bundle")?;
         let work = app.with_file_name(WORK_DIR);
         let _ = fs::remove_dir_all(&work);
         fs::create_dir(&work).with_context(|| {
             format!(
-                "{} に書き込めません",
+                "cannot write to {}",
                 work.parent().unwrap_or(&work).display()
             )
         })?;
@@ -332,7 +338,7 @@ mod platform {
 
     fn replace(app: &Path, work: &Path, archive: &[u8]) -> Result<()> {
         let zip = work.join("update.zip");
-        fs::write(&zip, archive).context("ダウンロードしたファイルを保存できません")?;
+        fs::write(&zip, archive).context("cannot save the downloaded file")?;
 
         // 署名済みの .app を壊さないよう、拡張属性やシンボリックリンクを保つ ditto で展開する
         let extracted = work.join("extracted");
@@ -345,15 +351,15 @@ mod platform {
         let new_app = fs::read_dir(&extracted)?
             .filter_map(|e| e.ok().map(|e| e.path()))
             .find(|p| p.extension().is_some_and(|ext| ext == "app"))
-            .context("ダウンロードしたファイルに .app が含まれていません")?;
+            .context("the downloaded archive contains no .app")?;
 
         verify(app, &new_app)?;
 
         let old = work.join("old.app");
-        fs::rename(app, &old).context("現在のアプリを退避できません")?;
+        fs::rename(app, &old).context("cannot move the current app aside")?;
         if let Err(e) = fs::rename(&new_app, app) {
             let _ = fs::rename(&old, app);
-            return Err(e).context("新しいアプリを配置できません");
+            return Err(e).context("cannot put the new app in place");
         }
         Ok(())
     }
@@ -366,17 +372,14 @@ mod platform {
                 .arg(new_app.join("Contents/Info.plist")),
         )?;
         let id = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        ensure!(
-            id == notifier::BUNDLE_ID,
-            "Bundle ID が一致しません（{id}）"
-        );
+        ensure!(id == notifier::BUNDLE_ID, "bundle ID mismatch ({id})");
 
         run_checked(
             Command::new("codesign")
                 .args(["--verify", "--deep", "--strict"])
                 .arg(new_app),
         )
-        .context("署名の検証に失敗しました")?;
+        .context("code signature verification failed")?;
 
         // 実行中のアプリが Developer ID で署名されていれば、同じ Team ID の署名であることを求める
         match team_id(current)? {
@@ -389,10 +392,10 @@ mod platform {
                         .arg(requirement)
                         .arg(new_app),
                 )
-                .context("署名者（Team ID）が一致しません")?;
+                .context("signer (Team ID) mismatch")?;
             }
             None => log(
-                "実行中のアプリが Developer ID で署名されていないため、署名者の照合を省略します",
+                "skipping the signer check because the running app has no Developer ID signature",
             ),
         }
         Ok(())
@@ -420,7 +423,7 @@ mod platform {
         // アプリが起動しないまま消えることがあった。
         // -n を付けないと、同じ Bundle ID の自身が前面に出るだけで新しい版が起動しない
         run_checked(Command::new("open").arg("-n").arg(app))
-            .context("新しいバージョンを起動できません")?;
+            .context("cannot launch the new version")?;
         Ok(())
     }
 }
@@ -452,28 +455,28 @@ mod platform {
     }
 
     pub fn install(archive: &[u8]) -> Result<PathBuf> {
-        let exe = std::env::current_exe().context("実行ファイルの場所が分かりません")?;
+        let exe = std::env::current_exe().context("cannot determine the executable path")?;
 
         let mut zip = zip::ZipArchive::new(Cursor::new(archive))
-            .context("ダウンロードしたファイルを展開できません")?;
+            .context("cannot open the downloaded archive")?;
         let mut entry = zip
             .by_name(EXE_NAME)
-            .with_context(|| format!("ダウンロードしたファイルに {EXE_NAME} が含まれていません"))?;
+            .with_context(|| format!("the downloaded archive contains no {EXE_NAME}"))?;
         let new = exe.with_extension("exe.new");
         {
-            let mut file = File::create(&new)
-                .with_context(|| format!("{} に書き込めません", new.display()))?;
-            io::copy(&mut entry, &mut file).context("新しい実行ファイルを書き出せません")?;
+            let mut file =
+                File::create(&new).with_context(|| format!("cannot write to {}", new.display()))?;
+            io::copy(&mut entry, &mut file).context("cannot write the new executable")?;
         }
 
         // 実行中の exe は上書きできないが名前は変えられるので、退避してから差し替える
         let old = old_path(&exe);
         let _ = fs::remove_file(&old);
-        fs::rename(&exe, &old).context("現在の実行ファイルを退避できません")?;
+        fs::rename(&exe, &old).context("cannot move the current executable aside")?;
         if let Err(e) = fs::rename(&new, &exe) {
             let _ = fs::rename(&old, &exe);
             let _ = fs::remove_file(&new);
-            return Err(e).context("新しい実行ファイルを配置できません");
+            return Err(e).context("cannot put the new executable in place");
         }
         Ok(exe)
     }
@@ -481,7 +484,7 @@ mod platform {
     pub fn relaunch(exe: &Path) -> Result<()> {
         Command::new(exe)
             .spawn()
-            .context("新しいバージョンを起動できません")?;
+            .context("cannot launch the new version")?;
         Ok(())
     }
 }
@@ -499,11 +502,11 @@ mod platform {
     pub fn cleanup_previous() {}
 
     pub fn install(_archive: &[u8]) -> Result<PathBuf> {
-        bail!("この OS は自動アップデートに対応していません")
+        bail!("automatic updates are not supported on this OS")
     }
 
     pub fn relaunch(_path: &Path) -> Result<()> {
-        bail!("この OS は自動アップデートに対応していません")
+        bail!("automatic updates are not supported on this OS")
     }
 }
 

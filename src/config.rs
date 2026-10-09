@@ -11,9 +11,42 @@ use std::time::Duration;
 use anyhow::{Context, Result, ensure};
 use serde::Deserialize;
 
-/// 初回起動時に書き出す設定ファイル。コメントを残すため serde で生成せず手書きしている
-const DEFAULT_CONFIG: &str = r#"# ping-notifier の設定
+use crate::i18n::{self, Lang, LanguageSetting};
+
+/// 初回起動時に書き出す設定ファイル。コメントを残すため serde で生成せず手書きしている。
+/// 作成時の表示言語（OS の言語）に合わせて英語版か日本語版を選ぶ
+const DEFAULT_CONFIG_EN: &str = r#"# Ping Notifier settings
+# After editing, choose "Reload Settings" from the menu to apply your changes.
+
+# Display language: "auto" (follow the OS), "en", or "ja"
+language = "auto"
+
+# Host name or IP address to monitor
+host = "8.8.8.8"
+
+# Interval between pings (seconds)
+interval_secs = 1.0
+
+# How long to wait for a reply (milliseconds). No reply within this time counts as packet loss.
+# On macOS this is rounded up to whole seconds.
+timeout_ms = 1000
+
+# Number of consecutive losses before notifying
+threshold = 1
+
+# Also notify when the connection is restored
+notify_recovery = true
+
+# Install new versions automatically
+# Even when false, you can update manually with "Check for Updates" in the menu.
+auto_update = true
+"#;
+
+const DEFAULT_CONFIG_JA: &str = r#"# Ping Notifier の設定
 # 変更後はメニューの「設定を再読み込み」で反映されます
+
+# 表示言語: "auto"（OS の言語に合わせる）、"en"、"ja"
+language = "auto"
 
 # 監視対象のホスト名または IP アドレス
 host = "8.8.8.8"
@@ -45,6 +78,7 @@ pub struct Config {
     pub threshold: u32,
     pub notify_recovery: bool,
     pub auto_update: bool,
+    pub language: LanguageSetting,
 }
 
 impl Default for Config {
@@ -56,6 +90,7 @@ impl Default for Config {
             threshold: 1,
             notify_recovery: true,
             auto_update: true,
+            language: LanguageSetting::Auto,
         }
     }
 }
@@ -70,43 +105,43 @@ impl Config {
     }
 
     fn validate(&self) -> Result<()> {
-        ensure!(!self.host.trim().is_empty(), "host が空です");
+        ensure!(!self.host.trim().is_empty(), "host must not be empty");
         ensure!(
             self.interval_secs.is_finite() && self.interval_secs > 0.0,
-            "interval_secs には正の数を指定してください"
+            "interval_secs must be a positive number"
         );
-        ensure!(
-            self.timeout_ms > 0,
-            "timeout_ms には正の数を指定してください"
-        );
-        ensure!(
-            self.threshold > 0,
-            "threshold には 1 以上を指定してください"
-        );
+        ensure!(self.timeout_ms > 0, "timeout_ms must be a positive number");
+        ensure!(self.threshold > 0, "threshold must be at least 1");
         Ok(())
     }
 }
 
 pub fn path() -> Result<PathBuf> {
-    let dir = dirs::config_dir().context("設定ディレクトリが見つかりません")?;
+    let dir = dirs::config_dir().context("config directory not found")?;
     Ok(dir.join("ping-notifier").join("config.toml"))
 }
 
-/// 設定ファイルを読み込む。存在しなければ既定値で作成する
+fn default_config(lang: Lang) -> &'static str {
+    match lang {
+        Lang::En => DEFAULT_CONFIG_EN,
+        Lang::Ja => DEFAULT_CONFIG_JA,
+    }
+}
+
+/// 設定ファイルを読み込む。存在しなければ現在の表示言語のテンプレートで作成する
 pub fn load_or_create(path: &Path) -> Result<Config> {
     if !path.exists() {
         if let Some(dir) = path.parent() {
-            fs::create_dir_all(dir)
-                .with_context(|| format!("{} を作成できません", dir.display()))?;
+            fs::create_dir_all(dir).with_context(|| format!("cannot create {}", dir.display()))?;
         }
-        fs::write(path, DEFAULT_CONFIG)
-            .with_context(|| format!("{} を作成できません", path.display()))?;
+        fs::write(path, default_config(i18n::current()))
+            .with_context(|| format!("cannot create {}", path.display()))?;
     }
 
     let text =
-        fs::read_to_string(path).with_context(|| format!("{} を読めません", path.display()))?;
-    let config: Config = toml::from_str(&text)
-        .with_context(|| format!("{} の形式が正しくありません", path.display()))?;
+        fs::read_to_string(path).with_context(|| format!("cannot read {}", path.display()))?;
+    let config: Config =
+        toml::from_str(&text).with_context(|| format!("invalid format in {}", path.display()))?;
     config.validate()?;
     Ok(config)
 }
@@ -116,15 +151,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_config_file_matches_default_values() {
-        let parsed: Config = toml::from_str(DEFAULT_CONFIG).unwrap();
+    fn default_config_files_match_default_values() {
         let default = Config::default();
-        assert_eq!(parsed.host, default.host);
-        assert_eq!(parsed.interval_secs, default.interval_secs);
-        assert_eq!(parsed.timeout_ms, default.timeout_ms);
-        assert_eq!(parsed.threshold, default.threshold);
-        assert_eq!(parsed.notify_recovery, default.notify_recovery);
-        assert_eq!(parsed.auto_update, default.auto_update);
+        for lang in [Lang::En, Lang::Ja] {
+            let parsed: Config = toml::from_str(default_config(lang)).unwrap();
+            assert_eq!(parsed.host, default.host, "{lang:?}");
+            assert_eq!(parsed.interval_secs, default.interval_secs, "{lang:?}");
+            assert_eq!(parsed.timeout_ms, default.timeout_ms, "{lang:?}");
+            assert_eq!(parsed.threshold, default.threshold, "{lang:?}");
+            assert_eq!(parsed.notify_recovery, default.notify_recovery, "{lang:?}");
+            assert_eq!(parsed.auto_update, default.auto_update, "{lang:?}");
+            assert_eq!(parsed.language, default.language, "{lang:?}");
+        }
+    }
+
+    #[test]
+    fn parses_language_setting() {
+        let config: Config = toml::from_str(r#"language = "ja""#).unwrap();
+        assert_eq!(config.language, LanguageSetting::Ja);
+        assert!(toml::from_str::<Config>(r#"language = "fr""#).is_err());
     }
 
     #[test]
