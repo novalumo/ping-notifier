@@ -8,7 +8,7 @@ A menu bar app (system tray app on Windows) that detects ping timeouts (packet l
 - Notifications are sent only when packet loss starts and when the connection is restored (no repeated notifications during an outage)
 - Updates itself automatically when a new version is released (see below)
 - "Launch at Login" can be toggled from the menu (macOS 13 or later / Windows)
-- Display languages: English, Japanese (follows the OS language; can also be set explicitly)
+- Display languages: English, Japanese, Chinese (Simplified) (follows the OS language; can also be set explicitly)
 
 ## Install with Homebrew (macOS)
 
@@ -158,6 +158,9 @@ The menu and notifications are available in the languages below. With `language 
 | --- | --- |
 | English | `"en"` |
 | Japanese | `"ja"` |
+| Chinese (Simplified) | `"zh"` |
+
+Chinese is available in Simplified characters only. With `"auto"`, Traditional Chinese locales (`zh-Hant`, `zh-TW`, `zh-HK`, `zh-MO`) are skipped and the next preferred language is used.
 
 The comments in the settings file created on first launch are written in the display language at that time. Logs and error details are always in English.
 
