@@ -153,7 +153,7 @@ mod tests {
     #[test]
     fn default_config_files_match_default_values() {
         let default = Config::default();
-        for lang in [Lang::En, Lang::Ja] {
+        for lang in Lang::ALL {
             let parsed: Config = toml::from_str(default_config(lang)).unwrap();
             assert_eq!(parsed.host, default.host, "{lang:?}");
             assert_eq!(parsed.interval_secs, default.interval_secs, "{lang:?}");

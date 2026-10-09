@@ -11,12 +11,17 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use semver::Version;
 use serde::Deserialize;
 
-/// 表示言語。追加するときは `Msg::ja` と同様の関数と `Msg::in_lang` の分岐を足す
+/// 表示言語。追加するときは `Lang::ALL` にも加え、`Msg::ja` と同様の関数と `Msg::in_lang` の分岐を足す
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Lang {
     En = 0,
     Ja = 1,
+}
+
+impl Lang {
+    /// 対応しているすべての言語。並びは判別子（`as u8`）の値と一致させる
+    pub const ALL: [Lang; 2] = [Lang::En, Lang::Ja];
 }
 
 /// 設定ファイルの `language`
@@ -47,10 +52,10 @@ pub fn set(lang: Lang) {
 }
 
 pub fn current() -> Lang {
-    match CURRENT.load(Ordering::Relaxed) {
-        1 => Lang::Ja,
-        _ => Lang::En,
-    }
+    Lang::ALL
+        .get(CURRENT.load(Ordering::Relaxed) as usize)
+        .copied()
+        .unwrap_or(Lang::En)
 }
 
 /// OS の優先言語の並び（例: `["ja-JP", "en-US"]`）から、最初に対応している言語を選ぶ
@@ -261,6 +266,13 @@ mod tests {
 
     fn locales(tags: &[&str]) -> Vec<String> {
         tags.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn all_languages_are_ordered_by_discriminant() {
+        for (i, lang) in Lang::ALL.into_iter().enumerate() {
+            assert_eq!(lang as usize, i, "{lang:?}");
+        }
     }
 
     #[test]
