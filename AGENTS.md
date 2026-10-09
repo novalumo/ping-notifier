@@ -48,7 +48,7 @@ direnv を使わない場合は `nix develop` で同じ devShell に入る。dev
 | `codesign --force --sign - "target/release/bundle/osx/Ping Notifier.app"` | `.app` の ad-hoc 署名（bundle のたびに必要） |
 | `./icons/generate.sh` | `icons/icon.svg` から PNG / ICO を再生成 |
 
-flake は devShell のみで、`nix build` 用の `packages` 出力はない。
+flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）と `apps` を出している。詳しくは「Nix パッケージ」を参照。
 
 ### 設定ファイル
 
@@ -106,6 +106,16 @@ flake は devShell のみで、`nix build` 用の `packages` 出力はない。
 - 自動更新に失敗した版は、手動確認されるまで自動では再試行しない（失敗通知の繰り返しを防ぐ）
 - `cfg(target_os = "macos")` 内だけで使う関数を共通部分に置くと、Windows の CI で dead code として `-D warnings` に落ちる。OS 固有の補助関数は `platform` モジュール内に置くこと
 
+### Nix パッケージ
+
+- `nix/package.nix` は `buildRustPackage` でソースからビルドし、`cargo bundle` で `.app` を作って `$out/Applications` に置く。バージョンは `Cargo.toml` から読む。`cargoLock.lockFile` を使うので、依存を変えても Nix 側のハッシュ更新は不要
+- `$out/bin/ping-notifier` は `.app` 内の実行ファイルを `exec` するシェルスクリプト。バイナリを直接 `bin` に置くと `.app` 外の起動と判定され、通知がターミナル.app 名義になり、ログイン時の起動も使えなくなる
+- ビルド時に `PING_NOTIFIER_DISABLE_SELF_UPDATE` を設定し、`updater::can_self_update` が `false` を返すようにしている（`option_env!` でコンパイル時に埋め込む）。`/nix/store` は読み取り専用で、更新は Nix が担うため。新版の通知とダウンロードページの案内は残る
+- cargo-bundle は `CFBundleVersion` にビルド時刻を入れるので、再現性のため `Info.plist` をバージョンで書き換えている
+- fixupPhase の strip でバイナリが変わるため、`postFixup` で `rcodesign` を使って `.app` 全体に ad-hoc 署名し直している（サンドボックス内では `/usr/bin/codesign` を使えない）
+- ソースは `lib.fileset` で必要なファイルだけに絞っている。ビルドに使うファイルを追加したら `fileset` にも加えること
+- Nix 版のバイナリは `/nix/store` の libiconv にリンクする。ハードンドランタイムを付けていない ad-hoc 署名なので問題なく起動する（配布物を CI でビルドする理由とは別の話）
+
 ### ログイン時の起動
 
 - 状態は OS 側の登録を正とし、設定ファイルには持たない（システム設定などで無効にされても表示が食い違わないように）。メニュー操作後は OS の実際の状態でチェック表示を上書きする
@@ -158,6 +168,7 @@ flake は devShell のみで、`nix build` 用の `packages` 出力はない。
 
 ## 未検証・既知の制約
 
+- Nix 版は `nix build` と起動・更新確認のログまでは確認したが、通知の表示とログイン時の起動（`/nix/store` のパスでの `SMAppService` 登録）は実機で確認していない
 - Windows 版はビルド・clippy・テストを CI で確認しているが、実機での動作は確認していない。通知は `notify-rust` の既定（PowerShell の AppUserModelID）名義で送られる。自前の名義にするには、インストーラーで AppUserModelID を登録する必要がある
 - IPv6 は未対応（macOS では IPv6 に `ping6` が別途必要）
 - 復旧通知は判定ロジックのテストのみで、実際の回線断からの復旧では確認していない
