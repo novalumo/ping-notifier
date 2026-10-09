@@ -46,7 +46,7 @@ Versions that are not signed and notarized show an OS warning on first launch. S
 
 ## Release process
 
-1. Update `version` in `Cargo.toml` and commit
+1. Update `version` in `Cargo.toml`, move the `Unreleased` entries in [CHANGELOG.md](CHANGELOG.md) under the new version, and commit
 2. Push a tag with the same version (e.g. `git tag v0.2.0 && git push origin v0.2.0`)
 3. `.github/workflows/release.yml` builds for macOS and Windows, creates a GitHub Release, and updates `Casks/ping-notifier.rb` in [novalumo/homebrew-tap](https://github.com/novalumo/homebrew-tap) (see below)
 

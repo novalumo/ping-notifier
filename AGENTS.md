@@ -124,6 +124,7 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 - `mainAppService` は実行中の .app 自身を登録するため、.app 外（`cargo run`）では使えない。判定は `notifier::running_in_app_bundle()` を共用
 - 以前ユーザーがシステム設定で無効にしていると、登録しても `RequiresApproval` になる。その場合は `openSystemSettingsLoginItems` で設定画面を開いて許可を促す
 - 自動アップデートは .app を同じパスで置き換えるので、登録は引き継がれる想定（Bundle ID と Team ID が変わらないため）
+- macOS のログイン項目（BTM）は、登録された .app が元の場所からなくなると、LaunchServices が知っている**同じ Bundle ID の別のコピー**に登録先を付け替えることがある。v0.5.0 への入れ替え時、`/Applications` の .app をゴミ箱に移した直後に登録先が `/nix/store/...`（`nix run` で起動した Nix 版）に変わり、新しい .app を `/Applications` に置いて起動すると戻ったのを `sfltool dumpbtm` で確認した。Homebrew 版・ダウンロード版と Nix 版を同時に入れると、ログイン時に意図しない方が起動しうる（README で同時インストールを避けるよう案内している理由）
 - Windows は `HKCU\...\Run` に引用符付きの exe パスを登録する。登録値が現在の exe パスと一致しなければ無効とみなす。タスクマネージャーの「スタートアップ アプリ」で無効化された状態（`StartupApproved`）までは見ていないため、その場合はメニュー上オンのままになる
 
 ### 多言語対応（i18n）
@@ -133,6 +134,7 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 - **翻訳するのはメニュー・ツールチップ・通知の見出しと案内文だけ**。ログと anyhow のエラーメッセージ（通知の本文に埋め込まれる詳細を含む）は英語で書く。ログに `Msg` を出すときは `msg.in_lang(Lang::En)` を使う（`report_error` 参照）
 - 表示言語はグローバル（`i18n::set` / `current`）。起動直後は OS の言語、設定を読んだ後は `config.language` で上書きし、「設定を再読み込み」で変わったら `MenuItems::relabel` で全項目を付け直す
 - 初回の設定ファイルは表示言語に合わせて `DEFAULT_CONFIG_EN` / `DEFAULT_CONFIG_JA` を書き出す。キーを追加するときは両方のテンプレートと `Config::default()`、README（英語・日本語）の表を更新する。テストで両テンプレートと既定値の一致を確認している
+- `CHANGELOG.md` は [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 形式で英語のみ。利用者に見える変更（機能・修正・配布物・対応 OS）は `## [Unreleased]` に追記し、リリース時にバージョンと日付の見出しへ移して末尾の比較リンクを足す。内部的な変更（CI・リファクタリング・AGENTS.md）は載せない
 - README は英語版（`README.md`）が正、日本語版は `README.ja.md`。内容を変えるときは両方を更新する。リリースノートのテンプレート（`.github/release-notes.md`）も英語を先、日本語を `<details>` 内に置いた二言語構成
 
 ## CI とリリース

@@ -46,7 +46,7 @@ flake はソースからビルドする。`$out/Applications/Ping Notifier.app` 
 
 ## リリース手順
 
-1. `Cargo.toml` の `version` を更新してコミットする
+1. `Cargo.toml` の `version` を更新し、[CHANGELOG.md](CHANGELOG.md) の `Unreleased` の内容を新しいバージョンの見出しへ移してコミットする
 2. 同じバージョンのタグを push する（例: `git tag v0.2.0 && git push origin v0.2.0`）
 3. `.github/workflows/release.yml` が macOS / Windows 向けにビルドして GitHub Release を作成し、[novalumo/homebrew-tap](https://github.com/novalumo/homebrew-tap) の `Casks/ping-notifier.rb` を更新する（後述）
 
