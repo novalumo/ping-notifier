@@ -14,11 +14,9 @@
         "x86_64-darwin"
         "aarch64-darwin"
       ];
-      # アプリ自体は macOS / Windows 向けなので、パッケージは macOS だけに出す
-      darwinSystems = [
-        "x86_64-darwin"
-        "aarch64-darwin"
-      ];
+      # アプリ自体は macOS / Windows 向けなので、パッケージは macOS だけに出す。
+      # Intel Mac は今後廃止されるため、Apple Silicon のみ対応する
+      darwinSystems = [ "aarch64-darwin" ];
       forAllSystems = nixpkgs.lib.genAttrs systems;
       forDarwinSystems = nixpkgs.lib.genAttrs darwinSystems;
     in

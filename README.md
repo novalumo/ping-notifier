@@ -18,7 +18,7 @@ brew install --cask novalumo/tap/ping-notifier
 
 The cask is in [novalumo/homebrew-tap](https://github.com/novalumo/homebrew-tap). The app updates itself, so `brew upgrade` skips it unless you pass `--greedy`.
 
-## Install with Nix (macOS)
+## Install with Nix (macOS, Apple Silicon)
 
 ```sh
 nix run github:siraken/ping-notifier          # try it without installing

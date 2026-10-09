@@ -65,6 +65,7 @@ rustPlatform.buildRustPackage {
     description = "Menu bar app that notifies you of ping timeouts";
     homepage = "https://github.com/siraken/ping-notifier";
     mainProgram = "ping-notifier";
-    platforms = lib.platforms.darwin;
+    # Intel Mac は今後廃止されるため対応しない
+    platforms = [ "aarch64-darwin" ];
   };
 }

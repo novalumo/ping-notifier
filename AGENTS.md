@@ -108,6 +108,7 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 
 ### Nix パッケージ
 
+- 対象は `aarch64-darwin` のみ。Intel Mac は今後廃止されるため、はじめから対応しない（配布物の zip は universal のまま）
 - `nix/package.nix` は `buildRustPackage` でソースからビルドし、`cargo bundle` で `.app` を作って `$out/Applications` に置く。バージョンは `Cargo.toml` から読む。`cargoLock.lockFile` を使うので、依存を変えても Nix 側のハッシュ更新は不要
 - `$out/bin/ping-notifier` は `.app` 内の実行ファイルを `exec` するシェルスクリプト。バイナリを直接 `bin` に置くと `.app` 外の起動と判定され、通知がターミナル.app 名義になり、ログイン時の起動も使えなくなる
 - ビルド時に `PING_NOTIFIER_DISABLE_SELF_UPDATE` を設定し、`updater::can_self_update` が `false` を返すようにしている（`option_env!` でコンパイル時に埋め込む）。`/nix/store` は読み取り専用で、更新は Nix が担うため。新版の通知とダウンロードページの案内は残る
@@ -168,7 +169,7 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 
 ## 未検証・既知の制約
 
-- Nix 版は aarch64-darwin で、通知の表示と、新版を見つけても置き換えずに案内だけ出すことを確認した。ログイン時の起動（`/nix/store` のパスでの `SMAppService` 登録）と x86_64-darwin でのビルドは確認していない
+- Nix 版は aarch64-darwin で、通知の表示と、新版を見つけても置き換えずに案内だけ出すことを確認した。ログイン時の起動（`/nix/store` のパスでの `SMAppService` 登録）は確認していない
 - Windows 版はビルド・clippy・テストを CI で確認しているが、実機での動作は確認していない。通知は `notify-rust` の既定（PowerShell の AppUserModelID）名義で送られる。自前の名義にするには、インストーラーで AppUserModelID を登録する必要がある
 - IPv6 は未対応（macOS では IPv6 に `ping6` が別途必要）
 - 復旧通知は判定ロジックのテストのみで、実際の回線断からの復旧では確認していない
