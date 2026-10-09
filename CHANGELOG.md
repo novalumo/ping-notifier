@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-09
+
 ### Changed
 
 - The repository moved from `siraken/ping-notifier` to `novalumo/ping-notifier`. Old URLs redirect to the new location, so existing installs keep updating
@@ -70,7 +72,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Icon color shows the status: OK / packet loss / paused / cannot run ping
 - TOML settings file that can be opened and reloaded from the menu
 
-[Unreleased]: https://github.com/novalumo/ping-notifier/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/novalumo/ping-notifier/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/novalumo/ping-notifier/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/novalumo/ping-notifier/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/novalumo/ping-notifier/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/novalumo/ping-notifier/compare/v0.3.0...v0.3.1
