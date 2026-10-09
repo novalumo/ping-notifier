@@ -18,7 +18,7 @@ use crate::i18n::{self, Lang, LanguageSetting};
 const DEFAULT_CONFIG_EN: &str = r#"# Ping Notifier settings
 # After editing, choose "Reload Settings" from the menu to apply your changes.
 
-# Display language: "auto" (follow the OS) or one of "en", "ja", "zh"
+# Display language: "auto" (follow the OS) or one of "en", "ja", "zh", "ko"
 language = "auto"
 
 # Host name or IP address to monitor
@@ -45,7 +45,7 @@ auto_update = true
 const DEFAULT_CONFIG_JA: &str = r#"# Ping Notifier の設定
 # 変更後はメニューの「設定を再読み込み」で反映されます
 
-# 表示言語: "auto"（OS の言語に合わせる）または "en"、"ja"、"zh"
+# 表示言語: "auto"（OS の言語に合わせる）または "en"、"ja"、"zh"、"ko"
 language = "auto"
 
 # 監視対象のホスト名または IP アドレス
@@ -72,7 +72,7 @@ auto_update = true
 const DEFAULT_CONFIG_ZH: &str = r#"# Ping Notifier 设置
 # 修改后，请在菜单中选择“重新加载设置”使更改生效。
 
-# 显示语言："auto"（跟随系统）或以下之一："en"、"ja"、"zh"
+# 显示语言："auto"（跟随系统）或以下之一："en"、"ja"、"zh"、"ko"
 language = "auto"
 
 # 要监控的主机名或 IP 地址
@@ -93,6 +93,33 @@ notify_recovery = true
 
 # 是否自动安装新版本
 # 即使设为 false，也可以通过菜单中的“检查更新”手动更新。
+auto_update = true
+"#;
+
+const DEFAULT_CONFIG_KO: &str = r#"# Ping Notifier 설정
+# 수정한 후 메뉴에서 "설정 다시 불러오기"를 선택하면 반영됩니다.
+
+# 표시 언어: "auto"(OS 언어를 따름) 또는 다음 중 하나: "en", "ja", "zh", "ko"
+language = "auto"
+
+# 모니터링할 호스트 이름 또는 IP 주소
+host = "8.8.8.8"
+
+# ping을 보내는 간격(초)
+interval_secs = 1.0
+
+# 응답을 기다리는 시간(밀리초). 이 시간 안에 응답이 없으면 패킷 손실로 간주합니다.
+# macOS에서는 초 단위로 올림됩니다.
+timeout_ms = 1000
+
+# 몇 번 연속으로 손실되면 알림을 보낼지
+threshold = 1
+
+# 연결이 복구되었을 때도 알림을 보낼지
+notify_recovery = true
+
+# 새 버전을 자동으로 설치할지
+# false로 설정해도 메뉴의 "업데이트 확인"으로 수동 업데이트할 수 있습니다.
 auto_update = true
 "#;
 
@@ -153,6 +180,7 @@ fn default_config(lang: Lang) -> &'static str {
         Lang::En => DEFAULT_CONFIG_EN,
         Lang::Ja => DEFAULT_CONFIG_JA,
         Lang::Zh => DEFAULT_CONFIG_ZH,
+        Lang::Ko => DEFAULT_CONFIG_KO,
     }
 }
 
