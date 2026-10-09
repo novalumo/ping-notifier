@@ -18,11 +18,12 @@ pub enum Lang {
     En = 0,
     Ja = 1,
     Zh = 2,
+    Ko = 3,
 }
 
 impl Lang {
     /// 対応しているすべての言語。並びは判別子（`as u8`）の値と一致させる
-    pub const ALL: [Lang; 3] = [Lang::En, Lang::Ja, Lang::Zh];
+    pub const ALL: [Lang; 4] = [Lang::En, Lang::Ja, Lang::Zh, Lang::Ko];
 }
 
 /// 設定ファイルの `language`
@@ -35,6 +36,7 @@ pub enum LanguageSetting {
     En,
     Ja,
     Zh,
+    Ko,
 }
 
 impl LanguageSetting {
@@ -44,6 +46,7 @@ impl LanguageSetting {
             Self::En => Lang::En,
             Self::Ja => Lang::Ja,
             Self::Zh => Lang::Zh,
+            Self::Ko => Lang::Ko,
         }
     }
 }
@@ -76,6 +79,7 @@ fn from_locale(tag: &str) -> Option<Lang> {
         "en" => Some(Lang::En),
         "ja" => Some(Lang::Ja),
         "zh" => is_simplified_chinese(tag).then_some(Lang::Zh),
+        "ko" => Some(Lang::Ko),
         _ => None,
     }
 }
@@ -162,6 +166,7 @@ impl Msg<'_> {
             Lang::En => self.en(),
             Lang::Ja => self.ja(),
             Lang::Zh => self.zh(),
+            Lang::Ko => self.ko(),
         }
     }
 
@@ -338,6 +343,70 @@ impl Msg<'_> {
             Self::TrayCreateFailedTitle => "无法创建托盘图标".into(),
         }
     }
+
+    fn ko(&self) -> String {
+        match *self {
+            Self::MenuStarting => "시작하는 중…".into(),
+            Self::MenuPause => "일시 정지".into(),
+            Self::MenuOpenConfig => "설정 파일 열기".into(),
+            Self::MenuReloadConfig => "설정 다시 불러오기".into(),
+            Self::MenuLaunchAtLogin => "로그인 시 실행".into(),
+            Self::MenuLaunchAtLoginUnavailable => {
+                "로그인 시 실행 (이 환경에서는 사용할 수 없음)".into()
+            }
+            Self::MenuCheckForUpdates => "업데이트 확인".into(),
+            Self::MenuDownloadUpdate { version } => format!("v{version} 다운로드…"),
+            Self::MenuVersion { version } => format!("버전 {version}"),
+            Self::MenuQuit => "종료".into(),
+
+            Self::StatusPaused => "일시 정지됨".into(),
+            Self::StatusUp { host } => format!("{host}: 정상"),
+            Self::StatusDown { host, consecutive } => {
+                format!("{host}: 응답 없음 ({consecutive}회 연속)")
+            }
+            Self::StatusPingError { host } => format!("{host}: ping을 실행할 수 없음"),
+
+            Self::LostTitle => "패킷 손실 감지".into(),
+            Self::LostBody { host, consecutive } => {
+                format!("{host}에서 {consecutive}회 연속으로 응답이 없습니다.")
+            }
+            Self::RecoveredTitle => "연결 복구됨".into(),
+            Self::RecoveredBody { host, lost, secs } => {
+                format!("{host} 연결이 복구되었습니다. (손실 {lost}회, 약 {secs}초)")
+            }
+
+            Self::UpdateCheckFailedTitle => "업데이트를 확인할 수 없습니다".into(),
+            Self::UpToDateTitle => "최신 버전입니다".into(),
+            Self::UpToDateBody { version } => {
+                format!("사용 중인 버전(v{version})이 최신 버전입니다.")
+            }
+            Self::UpdateAvailableTitle => "새 버전이 있습니다".into(),
+            Self::UpdateAvailableBody { version } => {
+                format!("새 버전(v{version})이 공개되었습니다. 메뉴에서 다운로드할 수 있습니다.")
+            }
+            Self::UpdatedTitle => "업데이트 완료".into(),
+            Self::UpdatedBody { from, to } => {
+                format!("v{from}에서 v{to} 버전으로 업데이트했습니다.")
+            }
+            Self::UpdateFailedTitle => "업데이트에 실패했습니다".into(),
+            Self::UpdateFailedHint => "메뉴에서 다운로드 페이지를 열 수 있습니다.".into(),
+            Self::RelaunchFailedTitle => "다시 시작할 수 없습니다. 앱을 다시 열어 주세요.".into(),
+
+            Self::AutostartSetFailedTitle => "로그인 시 실행 설정을 변경할 수 없습니다".into(),
+            Self::AutostartApprovalTitle => "로그인 시 실행하려면 승인이 필요합니다".into(),
+            Self::AutostartApprovalBody => {
+                "시스템 설정 > 일반 > 로그인 항목에서 Ping Notifier를 허용해 주세요.".into()
+            }
+
+            Self::ConfigLoadFailedUsingDefaultsTitle => {
+                "설정을 불러올 수 없습니다 (기본값으로 시작합니다)".into()
+            }
+            Self::ConfigLoadFailedTitle => "설정을 불러올 수 없습니다".into(),
+            Self::ConfigOpenFailedTitle => "설정 파일을 열 수 없습니다".into(),
+            Self::DownloadPageOpenFailedTitle => "다운로드 페이지를 열 수 없습니다".into(),
+            Self::TrayCreateFailedTitle => "트레이 아이콘을 만들 수 없습니다".into(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -442,5 +511,18 @@ mod tests {
             consecutive: 3,
         };
         assert_eq!(msg.in_lang(Lang::Zh), "8.8.8.8: 无响应（连续 3 次）");
+    }
+
+    #[test]
+    fn supports_korean() {
+        assert_eq!(from_locale("ko-KR"), Some(Lang::Ko));
+        assert_eq!(from_locale("ko"), Some(Lang::Ko));
+        assert_eq!(LanguageSetting::Ko.resolve(), Lang::Ko);
+
+        let msg = Msg::StatusDown {
+            host: "8.8.8.8",
+            consecutive: 3,
+        };
+        assert_eq!(msg.in_lang(Lang::Ko), "8.8.8.8: 응답 없음 (3회 연속)");
     }
 }
