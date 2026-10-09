@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-09
+
 ### Changed
 
 - Windows: the executable now carries version information (product name, description, company, and copyright). Files without it are more likely to be flagged by antivirus software
@@ -109,7 +111,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Icon color shows the status: OK / packet loss / paused / cannot run ping
 - TOML settings file that can be opened and reloaded from the menu
 
-[Unreleased]: https://github.com/novalumo/ping-notifier/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/novalumo/ping-notifier/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/novalumo/ping-notifier/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/novalumo/ping-notifier/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/novalumo/ping-notifier/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/novalumo/ping-notifier/compare/v0.6.0...v0.7.0
