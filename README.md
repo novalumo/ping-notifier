@@ -18,6 +18,21 @@ brew install --cask novalumo/tap/ping-notifier
 
 The cask is in [novalumo/homebrew-tap](https://github.com/novalumo/homebrew-tap). The app updates itself, so `brew upgrade` skips it unless you pass `--greedy`.
 
+## Install with Nix (macOS)
+
+```sh
+nix run github:siraken/ping-notifier          # try it without installing
+nix profile add github:siraken/ping-notifier  # install
+```
+
+The flake builds the app from source. `$out/Applications/Ping Notifier.app` is the app itself and `$out/bin/ping-notifier` launches it. With nix-darwin or Home Manager, add the flake as an input and put `inputs.ping-notifier.packages.${pkgs.system}.default` in `environment.systemPackages` or `home.packages`.
+
+Notes:
+
+- The app does not replace itself, because the Nix store is read-only. Update with Nix (e.g. `nix profile upgrade ping-notifier` or `nix flake update`). The app still tells you when a new version is released
+- The app's path changes with every update, so "Launch at Login" may need to be turned on again after updating
+- Do not install it together with the Homebrew or downloaded version (they share the same bundle ID)
+
 ## Download
 
 Download the file for your OS from [Releases](https://github.com/siraken/ping-notifier/releases).
