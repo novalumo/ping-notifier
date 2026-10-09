@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-09
+
 ### Added
 
 - "Silent Mode" in the menu: keeps monitoring and updating the icon, but sends no packet loss or recovery notifications
@@ -97,7 +99,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Icon color shows the status: OK / packet loss / paused / cannot run ping
 - TOML settings file that can be opened and reloaded from the menu
 
-[Unreleased]: https://github.com/novalumo/ping-notifier/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/novalumo/ping-notifier/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/novalumo/ping-notifier/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/novalumo/ping-notifier/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/novalumo/ping-notifier/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/novalumo/ping-notifier/compare/v0.5.1...v0.5.2
