@@ -99,7 +99,7 @@ flake は devShell のみで、`nix build` 用の `packages` 出力はない。
 - 配布ファイル名（`PingNotifier-<ver>-macos-universal.zip` / `-windows-x64.zip`）と `SHA256SUMS` はアップデータとリリースワークフローの間の契約。どちらかを変えるときは両方を合わせること
 - 検証: `SHA256SUMS` のハッシュ照合に加え、macOS では Bundle ID・`codesign --verify --deep --strict`・（実行中のアプリが Developer ID 署名なら）同一 Team ID の要件を確認する。Windows は署名がないのでハッシュ照合のみ
 - macOS の置き換えは `.app` と同じディレクトリに `.ping-notifier-update/` を作り、`ditto` で展開して `rename` で入れ替える（同一ボリューム内で原子的に入れ替えるため）。署名済み `.app` の展開に `unzip` や `zip` クレートを使うと拡張属性やシンボリックリンクが崩れて署名が壊れるので `ditto` を使う
-- macOS の再起動は `/bin/sh` で自身の終了を待ってから `open` する（実行中に `open` すると既存プロセスが前面に出るだけ）
+- macOS の再起動は、**自身が動いているうちに** `open -n` で新しい版を起動し、成功を確認してから終了する。以前は子プロセスの `/bin/sh` で自身の終了を待ってから `open` していたが、置き換え直後の .app に対する Gatekeeper の初回起動処理（CoreServicesUIAgent の quarantine-resolver）で要求元の自身が既に存在せず `-600 procNotFound` で失敗し、アプリが消えたまま起動しないことがあった（v0.3.0 で発生）。`-n` がないと同じ Bundle ID の自身が前面に出るだけになる。新旧が一瞬同時に動くのは許容している
 - Windows は実行中の exe を上書きできないが名前は変えられるため、`ping-notifier.exe.old` に退避して差し替え、新しい exe を起動してから終了する。`.old` は次回起動時に `cleanup_previous` が消す
 - 開発ビルド（macOS で `.app` 外、Windows の debug ビルド）では置き換えず、ダウンロードページの案内にとどめる
 - 自動更新に失敗した版は、手動確認されるまで自動では再試行しない（失敗通知の繰り返しを防ぐ）
