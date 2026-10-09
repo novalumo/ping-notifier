@@ -102,6 +102,7 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 - 検証: `SHA256SUMS` のハッシュ照合に加え、macOS では Bundle ID・`codesign --verify --deep --strict`・（実行中のアプリが Developer ID 署名なら）同一 Team ID の要件を確認する。Windows は署名がないのでハッシュ照合のみ
 - macOS の置き換えは `.app` と同じディレクトリに `.ping-notifier-update/` を作り、`ditto` で展開して `rename` で入れ替える（同一ボリューム内で原子的に入れ替えるため）。署名済み `.app` の展開に `unzip` や `zip` クレートを使うと拡張属性やシンボリックリンクが崩れて署名が壊れるので `ditto` を使う
 - macOS の再起動は、**自身が動いているうちに** `open -n` で新しい版を起動し、成功を確認してから終了する。以前は子プロセスの `/bin/sh` で自身の終了を待ってから `open` していたが、置き換え直後の .app に対する Gatekeeper の初回起動処理（CoreServicesUIAgent の quarantine-resolver）で要求元の自身が既に存在せず `-600 procNotFound` で失敗し、アプリが消えたまま起動しないことがあった（v0.3.0 で発生）。`-n` がないと同じ Bundle ID の自身が前面に出るだけになる。新旧が一瞬同時に動くのは許容している
+- 「アップデートしました」の通知は、**再起動後の新しい版**が送る。`relaunch` が新しい版に `--updated-from <旧バージョン>` を渡し（macOS は `open -n <app> --args ...`）、`main` が起動時に `updater::updated_from` で読んで通知する。v0.5.0 までは置き換え直後に旧版から送っていたが、自身の `.app` が既に消えているため、usernoted が送り主の署名を検証できず（securityd が ENOENT）`Denying message ... LegacyConnection identifier: com.novalumo.ping-notifier` で拒否していた（v0.5.0 → v0.5.1 で `log show` により確認）。同じ理由で、再起動に失敗したときの通知（`RelaunchFailedTitle`）も macOS では届かないことがある
 - Windows は実行中の exe を上書きできないが名前は変えられるため、`ping-notifier.exe.old` に退避して差し替え、新しい exe を起動してから終了する。`.old` は次回起動時に `cleanup_previous` が消す
 - 開発ビルド（macOS で `.app` 外、Windows の debug ビルド）では置き換えず、ダウンロードページの案内にとどめる
 - 自動更新に失敗した版は、手動確認されるまで自動では再試行しない（失敗通知の繰り返しを防ぐ）
@@ -126,6 +127,7 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 - 以前ユーザーがシステム設定で無効にしていると、登録しても `RequiresApproval` になる。その場合は `openSystemSettingsLoginItems` で設定画面を開いて許可を促す
 - 自動アップデートは .app を同じパスで置き換えるので、登録は引き継がれる想定（Bundle ID と Team ID が変わらないため）
 - macOS のログイン項目（BTM）は、登録された .app が元の場所からなくなると、LaunchServices が知っている**同じ Bundle ID の別のコピー**に登録先を付け替えることがある。v0.5.0 への入れ替え時、`/Applications` の .app をゴミ箱に移した直後に登録先が `/nix/store/...`（`nix run` で起動した Nix 版）に変わり、新しい .app を `/Applications` に置いて起動すると戻ったのを `sfltool dumpbtm` で確認した。Homebrew 版・ダウンロード版と Nix 版を同時に入れると、ログイン時に意図しない方が起動しうる（README で同時インストールを避けるよう案内している理由）
+- 同じ Bundle ID の `.app` を別の場所（作業用ディレクトリのテスト用ビルドなど）から起動すると、`/Applications` に .app があってもログイン項目の登録先がそのコピーに付け替わることがある（自動アップデートの検証中に確認）。検証後は `lsregister -u <テスト用の .app>` で登録を外して削除し、`/Applications` の .app を起動し直して `sfltool dumpbtm` で登録先を確かめること
 - Windows は `HKCU\...\Run` に引用符付きの exe パスを登録する。登録値が現在の exe パスと一致しなければ無効とみなす。タスクマネージャーの「スタートアップ アプリ」で無効化された状態（`StartupApproved`）までは見ていないため、その場合はメニュー上オンのままになる
 
 ### 多言語対応（i18n）
@@ -171,6 +173,8 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 | `src/updater.rs::tests` | タグのバージョン解釈と比較、`SHA256SUMS` の解析、SHA-256、OS ごとの配布ファイルの選択 |
 
 `ping.rs`・`notifier.rs`・UI・アップデートの置き換え処理は OS やネットワークに依存するため自動テストはない。変更したら実機で確認すること。macOS では `.app` を作って起動し、`192.0.2.1` を監視する設定で通知が出るかを見る。
+
+自動アップデートはリリースせずに確認できる。`Cargo.toml` の `version` を最新リリースより下げたコピーで `cargo bundle` → ad-hoc 署名した `.app` を作業用ディレクトリに置き、中の実行ファイルを直接起動すると、30 秒後に最新リリースへ置き換わって再起動する（ad-hoc 署名の版は Team ID の照合を省くため）。通知が届いたかは `log show --predicate 'process == "usernoted"'` で `Denying` や `Presenting` を探すと分かる。終わったら上記のとおりログイン項目の登録先を戻すこと
 
 ## 未検証・既知の制約
 

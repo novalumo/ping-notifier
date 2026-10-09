@@ -110,7 +110,7 @@ pub enum Msg<'a> {
     UpdateAvailableTitle,
     UpdateAvailableBody { version: &'a Version },
     UpdatedTitle,
-    UpdatedBody { version: &'a Version },
+    UpdatedBody { from: &'a Version, to: &'a Version },
     UpdateFailedTitle,
     UpdateFailedHint,
     RelaunchFailedTitle,
@@ -173,7 +173,7 @@ impl Msg<'_> {
                 format!("v{version} is available. You can download it from the menu.")
             }
             Self::UpdatedTitle => "Updated".into(),
-            Self::UpdatedBody { version } => format!("Updated to v{version}. Restarting…"),
+            Self::UpdatedBody { from, to } => format!("Updated from v{from} to v{to}."),
             Self::UpdateFailedTitle => "Update failed".into(),
             Self::UpdateFailedHint => "You can open the download page from the menu.".into(),
             Self::RelaunchFailedTitle => "Couldn't restart. Please reopen the app.".into(),
@@ -231,7 +231,7 @@ impl Msg<'_> {
                 format!("v{version} が公開されています。メニューからダウンロードできます")
             }
             Self::UpdatedTitle => "アップデートしました".into(),
-            Self::UpdatedBody { version } => format!("v{version} に更新しました。再起動します"),
+            Self::UpdatedBody { from, to } => format!("v{from} から v{to} に更新しました"),
             Self::UpdateFailedTitle => "アップデートに失敗しました".into(),
             Self::UpdateFailedHint => "メニューからダウンロードページを開けます".into(),
             Self::RelaunchFailedTitle => {
@@ -306,5 +306,13 @@ mod tests {
         };
         assert_eq!(msg.in_lang(Lang::En), "8.8.8.8: no response (3 in a row)");
         assert_eq!(msg.in_lang(Lang::Ja), "8.8.8.8: 応答なし（3 回連続）");
+
+        let (from, to) = (Version::new(0, 5, 0), Version::new(0, 5, 1));
+        let msg = Msg::UpdatedBody {
+            from: &from,
+            to: &to,
+        };
+        assert_eq!(msg.in_lang(Lang::En), "Updated from v0.5.0 to v0.5.1.");
+        assert_eq!(msg.in_lang(Lang::Ja), "v0.5.0 から v0.5.1 に更新しました");
     }
 }
