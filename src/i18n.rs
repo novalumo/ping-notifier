@@ -20,11 +20,12 @@ pub enum Lang {
     Zh = 2,
     Ko = 3,
     Eo = 4,
+    De = 5,
 }
 
 impl Lang {
     /// 対応しているすべての言語。並びは判別子（`as u8`）の値と一致させる
-    pub const ALL: [Lang; 5] = [Lang::En, Lang::Ja, Lang::Zh, Lang::Ko, Lang::Eo];
+    pub const ALL: [Lang; 6] = [Lang::En, Lang::Ja, Lang::Zh, Lang::Ko, Lang::Eo, Lang::De];
 }
 
 /// 設定ファイルの `language`
@@ -39,6 +40,7 @@ pub enum LanguageSetting {
     Zh,
     Ko,
     Eo,
+    De,
 }
 
 impl LanguageSetting {
@@ -50,6 +52,7 @@ impl LanguageSetting {
             Self::Zh => Lang::Zh,
             Self::Ko => Lang::Ko,
             Self::Eo => Lang::Eo,
+            Self::De => Lang::De,
         }
     }
 }
@@ -84,6 +87,7 @@ fn from_locale(tag: &str) -> Option<Lang> {
         "zh" => is_simplified_chinese(tag).then_some(Lang::Zh),
         "ko" => Some(Lang::Ko),
         "eo" => Some(Lang::Eo),
+        "de" => Some(Lang::De),
         _ => None,
     }
 }
@@ -172,6 +176,7 @@ impl Msg<'_> {
             Lang::Zh => self.zh(),
             Lang::Ko => self.ko(),
             Lang::Eo => self.eo(),
+            Lang::De => self.de(),
         }
     }
 
@@ -472,6 +477,75 @@ impl Msg<'_> {
             Self::TrayCreateFailedTitle => "Ne eblis krei la pletan piktogramon".into(),
         }
     }
+
+    fn de(&self) -> String {
+        match *self {
+            Self::MenuStarting => "Wird gestartet …".into(),
+            Self::MenuPause => "Pausieren".into(),
+            Self::MenuOpenConfig => "Einstellungsdatei öffnen".into(),
+            Self::MenuReloadConfig => "Einstellungen neu laden".into(),
+            Self::MenuLaunchAtLogin => "Beim Anmelden starten".into(),
+            Self::MenuLaunchAtLoginUnavailable => {
+                "Beim Anmelden starten (hier nicht verfügbar)".into()
+            }
+            Self::MenuCheckForUpdates => "Nach Updates suchen".into(),
+            Self::MenuDownloadUpdate { version } => format!("v{version} herunterladen …"),
+            Self::MenuVersion { version } => format!("Version {version}"),
+            Self::MenuQuit => "Beenden".into(),
+
+            Self::StatusPaused => "Pausiert".into(),
+            Self::StatusUp { host } => format!("{host}: OK"),
+            Self::StatusDown { host, consecutive } => {
+                format!("{host}: keine Antwort ({consecutive}-mal in Folge)")
+            }
+            Self::StatusPingError { host } => format!("{host}: ping kann nicht ausgeführt werden"),
+
+            Self::LostTitle => "Paketverlust erkannt".into(),
+            Self::LostBody { host, consecutive } => {
+                format!("Keine Antwort von {host} ({consecutive}-mal in Folge)")
+            }
+            Self::RecoveredTitle => "Verbindung wiederhergestellt".into(),
+            Self::RecoveredBody { host, lost, secs } => {
+                format!("{host} ist wieder erreichbar ({lost} verloren, etwa {secs} s)")
+            }
+
+            Self::UpdateCheckFailedTitle => "Suche nach Updates fehlgeschlagen".into(),
+            Self::UpToDateTitle => "Die App ist auf dem neuesten Stand".into(),
+            Self::UpToDateBody { version } => format!("v{version} ist die neueste Version."),
+            Self::UpdateAvailableTitle => "Eine neue Version ist verfügbar".into(),
+            Self::UpdateAvailableBody { version } => {
+                format!("v{version} ist verfügbar. Du kannst sie über das Menü herunterladen.")
+            }
+            Self::UpdatedTitle => "Aktualisiert".into(),
+            Self::UpdatedBody { from, to } => format!("Von v{from} auf v{to} aktualisiert."),
+            Self::UpdateFailedTitle => "Update fehlgeschlagen".into(),
+            Self::UpdateFailedHint => "Du kannst die Download-Seite über das Menü öffnen.".into(),
+            Self::RelaunchFailedTitle => {
+                "Neustart fehlgeschlagen. Bitte öffne die App erneut.".into()
+            }
+
+            Self::AutostartSetFailedTitle => {
+                "„Beim Anmelden starten“ konnte nicht geändert werden".into()
+            }
+            Self::AutostartApprovalTitle => "„Beim Anmelden starten“ muss erlaubt werden".into(),
+            Self::AutostartApprovalBody => {
+                "Erlaube Ping Notifier unter Systemeinstellungen > Allgemein > Anmeldeobjekte."
+                    .into()
+            }
+
+            Self::ConfigLoadFailedUsingDefaultsTitle => {
+                "Einstellungen konnten nicht geladen werden (Standardwerte werden verwendet)".into()
+            }
+            Self::ConfigLoadFailedTitle => "Einstellungen konnten nicht geladen werden".into(),
+            Self::ConfigOpenFailedTitle => {
+                "Die Einstellungsdatei konnte nicht geöffnet werden".into()
+            }
+            Self::DownloadPageOpenFailedTitle => {
+                "Die Download-Seite konnte nicht geöffnet werden".into()
+            }
+            Self::TrayCreateFailedTitle => "Das Statussymbol konnte nicht erstellt werden".into(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -509,7 +583,7 @@ mod tests {
 
     #[test]
     fn falls_back_to_english() {
-        assert_eq!(from_locales(locales(&["fr-FR", "de-DE"])), Lang::En);
+        assert_eq!(from_locales(locales(&["fr-FR", "it-IT"])), Lang::En);
         assert_eq!(from_locales(locales(&[])), Lang::En);
     }
 
@@ -604,6 +678,23 @@ mod tests {
         assert_eq!(
             msg.in_lang(Lang::Eo),
             "8.8.8.8: neniu respondo (3 sinsekve)"
+        );
+    }
+
+    #[test]
+    fn supports_german() {
+        assert_eq!(from_locale("de-DE"), Some(Lang::De));
+        assert_eq!(from_locale("de-AT"), Some(Lang::De));
+        assert_eq!(from_locale("de_CH"), Some(Lang::De));
+        assert_eq!(LanguageSetting::De.resolve(), Lang::De);
+
+        let msg = Msg::StatusDown {
+            host: "8.8.8.8",
+            consecutive: 3,
+        };
+        assert_eq!(
+            msg.in_lang(Lang::De),
+            "8.8.8.8: keine Antwort (3-mal in Folge)"
         );
     }
 }
