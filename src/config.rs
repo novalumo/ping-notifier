@@ -18,7 +18,7 @@ use crate::i18n::{self, Lang, LanguageSetting};
 const DEFAULT_CONFIG_EN: &str = r#"# Ping Notifier settings
 # After editing, choose "Reload Settings" from the menu to apply your changes.
 
-# Display language: "auto" (follow the OS) or one of "en", "ja", "zh", "ko"
+# Display language: "auto" (follow the OS) or one of "en", "ja", "zh", "ko", "eo"
 language = "auto"
 
 # Host name or IP address to monitor
@@ -45,7 +45,7 @@ auto_update = true
 const DEFAULT_CONFIG_JA: &str = r#"# Ping Notifier の設定
 # 変更後はメニューの「設定を再読み込み」で反映されます
 
-# 表示言語: "auto"（OS の言語に合わせる）または "en"、"ja"、"zh"、"ko"
+# 表示言語: "auto"（OS の言語に合わせる）または "en"、"ja"、"zh"、"ko"、"eo"
 language = "auto"
 
 # 監視対象のホスト名または IP アドレス
@@ -72,7 +72,7 @@ auto_update = true
 const DEFAULT_CONFIG_ZH: &str = r#"# Ping Notifier 设置
 # 修改后，请在菜单中选择“重新加载设置”使更改生效。
 
-# 显示语言："auto"（跟随系统）或以下之一："en"、"ja"、"zh"、"ko"
+# 显示语言："auto"（跟随系统）或以下之一："en"、"ja"、"zh"、"ko"、"eo"
 language = "auto"
 
 # 要监控的主机名或 IP 地址
@@ -99,7 +99,7 @@ auto_update = true
 const DEFAULT_CONFIG_KO: &str = r#"# Ping Notifier 설정
 # 수정한 후 메뉴에서 "설정 다시 불러오기"를 선택하면 반영됩니다.
 
-# 표시 언어: "auto"(OS 언어를 따름) 또는 다음 중 하나: "en", "ja", "zh", "ko"
+# 표시 언어: "auto"(OS 언어를 따름) 또는 다음 중 하나: "en", "ja", "zh", "ko", "eo"
 language = "auto"
 
 # 모니터링할 호스트 이름 또는 IP 주소
@@ -120,6 +120,33 @@ notify_recovery = true
 
 # 새 버전을 자동으로 설치할지
 # false로 설정해도 메뉴의 "업데이트 확인"으로 수동 업데이트할 수 있습니다.
+auto_update = true
+"#;
+
+const DEFAULT_CONFIG_EO: &str = r#"# Agordoj de Ping Notifier
+# Post redaktado, elektu "Reŝargi agordojn" en la menuo por apliki la ŝanĝojn.
+
+# Lingvo de la interfaco: "auto" (laŭ la operaciumo) aŭ unu el "en", "ja", "zh", "ko", "eo"
+language = "auto"
+
+# Kontrolota gastiga nomo aŭ IP-adreso
+host = "8.8.8.8"
+
+# Intervalo inter pingoj (sekundoj)
+interval_secs = 1.0
+
+# Kiom longe atendi respondon (milisekundoj). Se neniu respondo venas dum tiu tempo, tio kalkuliĝas kiel perdo de pakoj.
+# Ĉe macOS tio rondiĝas supren al tutaj sekundoj.
+timeout_ms = 1000
+
+# Nombro de sinsekvaj perdoj antaŭ sciigo
+threshold = 1
+
+# Sciigi ankaŭ kiam la konekto restariĝas
+notify_recovery = true
+
+# Aŭtomate instali novajn versiojn
+# Eĉ se false, vi povas ĝisdatigi permane per "Serĉi ĝisdatigojn" en la menuo.
 auto_update = true
 "#;
 
@@ -181,6 +208,7 @@ fn default_config(lang: Lang) -> &'static str {
         Lang::Ja => DEFAULT_CONFIG_JA,
         Lang::Zh => DEFAULT_CONFIG_ZH,
         Lang::Ko => DEFAULT_CONFIG_KO,
+        Lang::Eo => DEFAULT_CONFIG_EO,
     }
 }
 
