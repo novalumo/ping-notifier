@@ -170,9 +170,12 @@ fn check_and_apply(manual: bool, failed: &mut Option<Version>, on_event: &dyn Fn
 }
 
 /// 実行中のアプリをこの場で置き換えられるか。
-/// 開発中の `cargo run` などでは置き換えず、ダウンロードページの案内にとどめる
+/// 開発中の `cargo run` などでは置き換えず、ダウンロードページの案内にとどめる。
+/// Nix などのパッケージマネージャーでビルドした版も、ビルド時に
+/// `PING_NOTIFIER_DISABLE_SELF_UPDATE` を設定して置き換えを止める
+/// （インストール先が読み取り専用で、更新はパッケージマネージャーが担うため）
 pub fn can_self_update() -> bool {
-    platform::can_self_update()
+    option_env!("PING_NOTIFIER_DISABLE_SELF_UPDATE").is_none() && platform::can_self_update()
 }
 
 /// 前回のアップデートで残った一時ファイルを掃除する。起動時に呼ぶ
