@@ -91,6 +91,20 @@ flake は devShell のみで、`nix build` 用の `packages` 出力はない。
 - 生成物（`icons/png/`、`icons/icon.ico`）もリポジトリに含めている（ビルドに ImageMagick 等を要求しないため）。アイコンを変えるときは `icons/icon.svg` を編集してスクリプトで再生成する
 - Windows の `.exe` へのアイコン埋め込みは `build.rs` が `winresource` で行う。対象 OS は `CARGO_CFG_TARGET_OS` で判定する（`cfg(windows)` はビルドホストの判定になるため使わない）
 
+## CI とリリース
+
+| ワークフロー | 契機 | 内容 |
+| --- | --- | --- |
+| `.github/workflows/ci.yml` | main への push、PR | macOS / Windows で `fmt --check`・`clippy -D warnings`・`test` |
+| `.github/workflows/release.yml` | `v*` タグの push、手動実行 | macOS universal `.app` と Windows x64 `.exe` を zip 化。タグ時のみ GitHub Release を作成 |
+
+- CI は Nix を使わず `dtolnay/rust-toolchain@stable` を使う（Windows ランナーで Nix が使えないため）。`cargo-bundle` は `cargo install` で入れる
+- macOS は `aarch64` と `x86_64` を別々にビルドし、`cargo bundle --target aarch64-apple-darwin` で作った `.app` のバイナリを `lipo` で結合した universal バイナリに差し替えてから ad-hoc 署名する。差し替え後に署名し直さないと署名が壊れる
+- リリースはタグと `Cargo.toml` の `version` の一致を検証する。バージョンを上げるときは `Cargo.toml` を更新してからタグを打つ
+- Release 本文は `.github/release-notes.md`（インストール手順）に、GitHub の自動生成ノートを連結したもの
+- 署名・公証はしていない。正式に配布するなら Apple Developer ID での署名と notarization、Windows のコード署名が必要（シークレットの登録が要る）
+- `--locked` を付けているので、依存を変えたら `Cargo.lock` もコミットすること
+
 ## テスト方針
 
 | 場所 | 対象 |
@@ -102,6 +116,6 @@ flake は devShell のみで、`nix build` 用の `packages` 出力はない。
 
 ## 未検証・既知の制約
 
-- Windows 版は実機でビルド・動作を確認していない。通知は `notify-rust` の既定（PowerShell の AppUserModelID）名義で送られる。自前の名義にするには、インストーラーで AppUserModelID を登録する必要がある
+- Windows 版はビルド・clippy・テストを CI で確認しているが、実機での動作は確認していない。通知は `notify-rust` の既定（PowerShell の AppUserModelID）名義で送られる。自前の名義にするには、インストーラーで AppUserModelID を登録する必要がある
 - IPv6 は未対応（macOS では IPv6 に `ping6` が別途必要）
 - 復旧通知は判定ロジックのテストのみで、実際の回線断からの復旧では確認していない

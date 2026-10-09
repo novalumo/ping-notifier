@@ -5,6 +5,25 @@ ping のタイムアウト（パケットロス）を検知して OS の通知�
 - アイコンの色で状態を表示: 緑 = 正常 / 赤 = ロス中 / 灰 = 一時停止 / 橙 = ping を実行できない
 - 通知はロス状態に入ったときと復旧したときにだけ送られる（ロスが続いている間は繰り返さない）
 
+## ダウンロード
+
+[Releases](https://github.com/siraken/ping-notifier/releases) から OS に合ったファイルをダウンロードする。
+
+| OS | ファイル |
+| --- | --- |
+| macOS（Apple Silicon / Intel） | `PingNotifier-<version>-macos-universal.zip` |
+| Windows（x64） | `PingNotifier-<version>-windows-x64.zip` |
+
+署名・公証を行っていないため、初回起動時に OS の警告が出る。回避手順は各リリースのノート（`.github/release-notes.md`）を参照。
+
+## リリース手順
+
+1. `Cargo.toml` の `version` を更新してコミットする
+2. 同じバージョンのタグを push する（例: `git tag v0.2.0 && git push origin v0.2.0`）
+3. `.github/workflows/release.yml` が macOS / Windows 向けにビルドし、GitHub Release を作成する
+
+タグと `Cargo.toml` の `version` が一致しないとワークフローは失敗する。Actions 画面から手動実行（workflow_dispatch）すると、Release を作らずにビルドだけを試せる（成果物は実行結果の Artifacts から取得できる）。
+
 ## ビルド
 
 ```bash
@@ -49,4 +68,4 @@ cp -R "target/release/bundle/osx/Ping Notifier.app" /Applications/
 ## 注意
 
 - macOS の `ping` はタイムアウトを秒単位（`-t`）でも制限しているため、`timeout_ms` は実質的に秒単位に切り上げられる
-- Windows 版は未検証。通知は notify-rust の既定（PowerShell 名義）で送られる
+- Windows 版はビルドとテストのみ CI で確認しており、実機での動作は未検証。通知は notify-rust の既定（PowerShell 名義）で送られる
