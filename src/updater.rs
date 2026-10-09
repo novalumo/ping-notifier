@@ -414,15 +414,13 @@ mod platform {
     }
 
     pub fn relaunch(app: &Path) -> Result<()> {
-        // 自身の終了を待ってから開く（実行中に open すると既存プロセスが前面に出るだけになる）
-        Command::new("/bin/sh")
-            .arg("-c")
-            .arg(r#"while kill -0 "$1" 2>/dev/null; do sleep 0.2; done; open "$2""#)
-            .arg("sh")
-            .arg(std::process::id().to_string())
-            .arg(app)
-            .spawn()
-            .context("再起動用のプロセスを起動できません")?;
+        // 自身が動いているうちに新しいインスタンスを起動し、成功を確認してから終了する。
+        // 終了後に子プロセスから open すると、置き換え直後の .app に対する Gatekeeper の
+        // 初回起動処理で要求元（終了済みの自身）が見つからず -600 (procNotFound) で失敗し、
+        // アプリが起動しないまま消えることがあった。
+        // -n を付けないと、同じ Bundle ID の自身が前面に出るだけで新しい版が起動しない
+        run_checked(Command::new("open").arg("-n").arg(app))
+            .context("新しいバージョンを起動できません")?;
         Ok(())
     }
 }
