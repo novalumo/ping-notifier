@@ -171,6 +171,8 @@ fn main() -> Result<()> {
                     *control_flow = ControlFlow::Exit;
                 } else if e.id == items.pause.id() {
                     let _ = worker.send(Command::SetPaused(items.pause.is_checked()));
+                } else if e.id == items.silent.id() {
+                    let _ = worker.send(Command::SetSilent(items.silent.is_checked()));
                 } else if e.id == items.open.id() {
                     if let Err(e) = open_in_editor(&config_path) {
                         report_error(Msg::ConfigOpenFailedTitle, &e);
@@ -218,6 +220,7 @@ fn main() -> Result<()> {
 struct MenuItems {
     status: MenuItem,
     pause: CheckMenuItem,
+    silent: CheckMenuItem,
     open: MenuItem,
     reload: MenuItem,
     autostart: CheckMenuItem,
@@ -233,6 +236,7 @@ impl MenuItems {
         let items = Self {
             status: MenuItem::new("", false, None),
             pause: CheckMenuItem::new("", true, false, None),
+            silent: CheckMenuItem::new("", true, false, None),
             open: MenuItem::new("", true, None),
             reload: MenuItem::new("", true, None),
             autostart: CheckMenuItem::new(
@@ -255,6 +259,7 @@ impl MenuItems {
             &self.status,
             &PredefinedMenuItem::separator(),
             &self.pause,
+            &self.silent,
             &self.open,
             &self.reload,
             &self.autostart,
@@ -274,6 +279,7 @@ impl MenuItems {
         };
         self.status.set_text(&status_text);
         self.pause.set_text(t(Msg::MenuPause));
+        self.silent.set_text(t(Msg::MenuSilent));
         self.open.set_text(t(Msg::MenuOpenConfig));
         self.reload.set_text(t(Msg::MenuReloadConfig));
         self.autostart.set_text(t(if self.autostart_supported {

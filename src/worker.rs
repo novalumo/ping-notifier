@@ -13,6 +13,8 @@ use crate::{log, notifier, ping};
 #[derive(Debug)]
 pub enum Command {
     SetPaused(bool),
+    /// サイレントモード。監視とアイコンの更新は続け、ロス・復旧・遅延の通知だけ止める
+    SetSilent(bool),
     Reload(Config),
 }
 
@@ -50,6 +52,7 @@ pub fn spawn(config: Config, on_status: impl Fn(Status) + Send + 'static) -> Sen
 fn run(mut config: Config, rx: &Receiver<Command>, on_status: &dyn Fn(Status)) {
     let mut monitors = Monitors::new(&config);
     let mut paused = false;
+    let mut silent = false;
 
     loop {
         let started = Instant::now();
@@ -58,18 +61,18 @@ fn run(mut config: Config, rx: &Receiver<Command>, on_status: &dyn Fn(Status)) {
             on_status(Status::Paused);
             // 一時停止中は指示が来るまで待つ
             match rx.recv() {
-                Ok(cmd) => apply(cmd, &mut config, &mut monitors, &mut paused),
+                Ok(cmd) => apply(cmd, &mut config, &mut monitors, &mut paused, &mut silent),
                 Err(_) => return,
             }
             continue;
         }
 
-        on_status(check(&config, &mut monitors));
+        on_status(check(&config, &mut monitors, silent));
 
         // 次の ping までの間も指示を受け付け、届いたらすぐ反映する
         let remaining = (started + config.interval()).saturating_duration_since(Instant::now());
         match rx.recv_timeout(remaining) {
-            Ok(cmd) => apply(cmd, &mut config, &mut monitors, &mut paused),
+            Ok(cmd) => apply(cmd, &mut config, &mut monitors, &mut paused, &mut silent),
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => return,
         }
@@ -97,16 +100,27 @@ fn latency_monitor(config: &Config) -> Option<LatencyMonitor> {
     Some(LatencyMonitor::new(threshold, config.latency_consecutive))
 }
 
-fn apply(cmd: Command, config: &mut Config, monitors: &mut Monitors, paused: &mut bool) {
+fn apply(
+    cmd: Command,
+    config: &mut Config,
+    monitors: &mut Monitors,
+    paused: &mut bool,
+    silent: &mut bool,
+) {
     match cmd {
         Command::SetPaused(p) => *paused = p,
         Command::Reload(new) => *config = new,
+        // 通知するかどうかだけの切り替えなので、監視の状態はそのまま引き継ぐ
+        Command::SetSilent(s) => {
+            *silent = s;
+            return;
+        }
     }
     // 設定や一時停止の切り替えをまたいでロス回数や遅延の状態を持ち越さない
     *monitors = Monitors::new(config);
 }
 
-fn check(config: &Config, monitors: &mut Monitors) -> Status {
+fn check(config: &Config, monitors: &mut Monitors, silent: bool) -> Status {
     let host = config.host.clone();
     let reply = match ping::ping_once(&host, config.timeout()) {
         Ok(reply) => reply,
@@ -129,7 +143,9 @@ fn check(config: &Config, monitors: &mut Monitors) -> Status {
                 consecutive,
             };
             log(&format!("[lost] {}", body.in_lang(Lang::En)));
-            notifier::notify(&t(Msg::LostTitle), &t(body));
+            if !silent {
+                notifier::notify(&t(Msg::LostTitle), &t(body));
+            }
             // ロスを優先する。遅延の状態は通知せずに捨て、復旧後に判定し直す
             monitors.latency = latency_monitor(config);
         }
@@ -140,7 +156,7 @@ fn check(config: &Config, monitors: &mut Monitors) -> Status {
                 secs: downtime.as_secs(),
             };
             log(&format!("[recovered] {}", body.in_lang(Lang::En)));
-            if config.notify_recovery {
+            if config.notify_recovery && !silent {
                 notifier::notify(&t(Msg::RecoveredTitle), &t(body));
             }
         }
@@ -161,7 +177,9 @@ fn check(config: &Config, monitors: &mut Monitors) -> Status {
             Some(LatencyEvent::High { rtt }) => {
                 let body = Msg::LatencyHighBody { host: &host, rtt };
                 log(&format!("[latency high] {}", body.in_lang(Lang::En)));
-                notifier::notify(&t(Msg::LatencyHighTitle), &t(body));
+                if !silent {
+                    notifier::notify(&t(Msg::LatencyHighTitle), &t(body));
+                }
             }
             Some(LatencyEvent::Normal { duration }) => {
                 let body = Msg::LatencyNormalBody {
@@ -169,7 +187,7 @@ fn check(config: &Config, monitors: &mut Monitors) -> Status {
                     secs: duration.as_secs(),
                 };
                 log(&format!("[latency normal] {}", body.in_lang(Lang::En)));
-                if config.notify_recovery {
+                if config.notify_recovery && !silent {
                     notifier::notify(&t(Msg::LatencyNormalTitle), &t(body));
                 }
             }
