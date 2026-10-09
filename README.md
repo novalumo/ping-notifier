@@ -10,6 +10,14 @@ A menu bar app (system tray app on Windows) that detects ping timeouts (packet l
 - "Launch at Login" can be toggled from the menu (macOS 13 or later / Windows)
 - Available in English and Japanese (follows the OS language; can also be set explicitly)
 
+## Install with Homebrew (macOS)
+
+```sh
+brew install --cask novalumo/tap/ping-notifier
+```
+
+The cask is in [novalumo/homebrew-tap](https://github.com/novalumo/homebrew-tap). The app updates itself, so `brew upgrade` skips it unless you pass `--greedy`.
+
 ## Download
 
 Download the file for your OS from [Releases](https://github.com/siraken/ping-notifier/releases).
@@ -26,6 +34,7 @@ Versions that are not signed and notarized show an OS warning on first launch. S
 1. Update `version` in `Cargo.toml` and commit
 2. Push a tag with the same version (e.g. `git tag v0.2.0 && git push origin v0.2.0`)
 3. `.github/workflows/release.yml` builds for macOS and Windows and creates a GitHub Release
+4. Update `version` and `sha256` in `Casks/ping-notifier.rb` of [novalumo/homebrew-tap](https://github.com/novalumo/homebrew-tap) (the hash of the macOS zip is in `SHA256SUMS`)
 
 The workflow fails if the tag does not match `version` in `Cargo.toml`. Running it manually (workflow_dispatch) from the Actions page builds without creating a release; the build outputs are available as artifacts of the run.
 

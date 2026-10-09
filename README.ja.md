@@ -10,6 +10,14 @@ ping のタイムアウト（パケットロス）を検知して OS の通知�
 - メニューの「ログイン時に起動」で自動起動を切り替えられる（macOS 13 以降 / Windows）
 - 英語と日本語に対応（OS の言語に合わせて切り替わり、設定で固定もできる）
 
+## Homebrew でインストール（macOS）
+
+```sh
+brew install --cask novalumo/tap/ping-notifier
+```
+
+Cask は [novalumo/homebrew-tap](https://github.com/novalumo/homebrew-tap) にある。アプリが自身でアップデートするため、`brew upgrade` では `--greedy` を付けない限り更新対象にならない。
+
 ## ダウンロード
 
 [Releases](https://github.com/siraken/ping-notifier/releases) から OS に合ったファイルをダウンロードする。
@@ -26,6 +34,7 @@ ping のタイムアウト（パケットロス）を検知して OS の通知�
 1. `Cargo.toml` の `version` を更新してコミットする
 2. 同じバージョンのタグを push する（例: `git tag v0.2.0 && git push origin v0.2.0`）
 3. `.github/workflows/release.yml` が macOS / Windows 向けにビルドし、GitHub Release を作成する
+4. [novalumo/homebrew-tap](https://github.com/novalumo/homebrew-tap) の `Casks/ping-notifier.rb` の `version` と `sha256` を更新する（macOS の zip のハッシュは `SHA256SUMS` にある）
 
 タグと `Cargo.toml` の `version` が一致しないとワークフローは失敗する。Actions 画面から手動実行（workflow_dispatch）すると、Release を作らずにビルドだけを試せる（成果物は実行結果の Artifacts から取得できる）。
 
