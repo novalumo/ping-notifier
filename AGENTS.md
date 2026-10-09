@@ -116,6 +116,8 @@ flake は devShell のみで、`nix build` 用の `packages` 出力はない。
 - リリースはタグと `Cargo.toml` の `version` の一致を検証する。バージョンを上げるときは `Cargo.toml` を更新してからタグを打つ
 - Release 本文は `.github/release-notes.md`（インストール手順）に、GitHub の自動生成ノートを連結したもの
 - macOS は Secrets（`MACOS_CERTIFICATE_P12` ほか。README 参照）が登録されていれば Developer ID 署名（ハードンドランタイム + タイムスタンプ）→ `notarytool` で公証 → `stapler` で添付する。未登録なら ad-hoc 署名で配布し、ワークフローに警告を出す
+- **配布物は必ず CI でビルドする**。Nix の devShell でビルドしたバイナリは `/nix/store` の dylib（libiconv など）にリンクするため、ハードンドランタイムで署名すると「異なる Team ID のライブラリ」として dyld に読み込みを拒否され起動しない（CI のバイナリは `/usr/lib` と `/System/Library` にしかリンクしない）
+- `codesign --verify -R` に要件文字列を渡すときは、**別の引数として `=` 始まりで**渡す（`-R "=anchor apple generic ..."`）。`=` がないとファイルパスとして扱われ、`-R='=...'` のように連結すると構文エラーになる。`updater.rs` は前者の形
 - ワークフローの `if:` では `secrets` コンテキストを直接参照できないため、ジョブの `env` に移してから `env.X != ''` で判定している
 - Windows のコード署名はしていない（SmartScreen の警告が出る）
 - リリースジョブは配布ファイルから `SHA256SUMS` を生成して添付する。自動アップデートの検証に使う
