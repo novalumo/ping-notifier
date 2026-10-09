@@ -19,11 +19,12 @@ pub enum Lang {
     Ja = 1,
     Zh = 2,
     Ko = 3,
+    Eo = 4,
 }
 
 impl Lang {
     /// 対応しているすべての言語。並びは判別子（`as u8`）の値と一致させる
-    pub const ALL: [Lang; 4] = [Lang::En, Lang::Ja, Lang::Zh, Lang::Ko];
+    pub const ALL: [Lang; 5] = [Lang::En, Lang::Ja, Lang::Zh, Lang::Ko, Lang::Eo];
 }
 
 /// 設定ファイルの `language`
@@ -37,6 +38,7 @@ pub enum LanguageSetting {
     Ja,
     Zh,
     Ko,
+    Eo,
 }
 
 impl LanguageSetting {
@@ -47,6 +49,7 @@ impl LanguageSetting {
             Self::Ja => Lang::Ja,
             Self::Zh => Lang::Zh,
             Self::Ko => Lang::Ko,
+            Self::Eo => Lang::Eo,
         }
     }
 }
@@ -80,6 +83,7 @@ fn from_locale(tag: &str) -> Option<Lang> {
         "ja" => Some(Lang::Ja),
         "zh" => is_simplified_chinese(tag).then_some(Lang::Zh),
         "ko" => Some(Lang::Ko),
+        "eo" => Some(Lang::Eo),
         _ => None,
     }
 }
@@ -167,6 +171,7 @@ impl Msg<'_> {
             Lang::Ja => self.ja(),
             Lang::Zh => self.zh(),
             Lang::Ko => self.ko(),
+            Lang::Eo => self.eo(),
         }
     }
 
@@ -407,6 +412,66 @@ impl Msg<'_> {
             Self::TrayCreateFailedTitle => "트레이 아이콘을 만들 수 없습니다".into(),
         }
     }
+
+    fn eo(&self) -> String {
+        match *self {
+            Self::MenuStarting => "Lanĉiĝas…".into(),
+            Self::MenuPause => "Paŭzi".into(),
+            Self::MenuOpenConfig => "Malfermi agordan dosieron".into(),
+            Self::MenuReloadConfig => "Reŝargi agordojn".into(),
+            Self::MenuLaunchAtLogin => "Lanĉi ĉe ensaluto".into(),
+            Self::MenuLaunchAtLoginUnavailable => "Lanĉi ĉe ensaluto (ne disponebla ĉi tie)".into(),
+            Self::MenuCheckForUpdates => "Serĉi ĝisdatigojn".into(),
+            Self::MenuDownloadUpdate { version } => format!("Elŝuti v{version}…"),
+            Self::MenuVersion { version } => format!("Versio {version}"),
+            Self::MenuQuit => "Eliri".into(),
+
+            Self::StatusPaused => "Paŭzita".into(),
+            Self::StatusUp { host } => format!("{host}: en ordo"),
+            Self::StatusDown { host, consecutive } => {
+                format!("{host}: neniu respondo ({consecutive} sinsekve)")
+            }
+            Self::StatusPingError { host } => format!("{host}: ne eblas ruli ping"),
+
+            Self::LostTitle => "Perdo de pakoj detektita".into(),
+            Self::LostBody { host, consecutive } => {
+                format!("Neniu respondo de {host} ({consecutive} sinsekve)")
+            }
+            Self::RecoveredTitle => "Konekto restarigita".into(),
+            Self::RecoveredBody { host, lost, secs } => {
+                format!("{host} denove atingeblas (perditaj: {lost}, ĉirkaŭ {secs} s)")
+            }
+
+            Self::UpdateCheckFailedTitle => "Ne eblis serĉi ĝisdatigojn".into(),
+            Self::UpToDateTitle => "Vi havas la plej novan version".into(),
+            Self::UpToDateBody { version } => format!("v{version} estas la plej nova versio."),
+            Self::UpdateAvailableTitle => "Nova versio disponeblas".into(),
+            Self::UpdateAvailableBody { version } => {
+                format!("v{version} disponeblas. Vi povas elŝuti ĝin per la menuo.")
+            }
+            Self::UpdatedTitle => "Ĝisdatigita".into(),
+            Self::UpdatedBody { from, to } => format!("Ĝisdatigita de v{from} al v{to}."),
+            Self::UpdateFailedTitle => "Ĝisdatigo malsukcesis".into(),
+            Self::UpdateFailedHint => "Vi povas malfermi la elŝutan paĝon per la menuo.".into(),
+            Self::RelaunchFailedTitle => {
+                "Ne eblis restartigi. Bonvolu remalfermi la aplikaĵon.".into()
+            }
+
+            Self::AutostartSetFailedTitle => "Ne eblis ŝanĝi la lanĉon ĉe ensaluto".into(),
+            Self::AutostartApprovalTitle => "Lanĉo ĉe ensaluto bezonas vian permeson".into(),
+            Self::AutostartApprovalBody => {
+                "Permesu Ping Notifier en Sistemaj agordoj > Ĝenerala > Ensalutaj eroj.".into()
+            }
+
+            Self::ConfigLoadFailedUsingDefaultsTitle => {
+                "Ne eblis ŝargi la agordojn (uziĝas la defaŭltaj)".into()
+            }
+            Self::ConfigLoadFailedTitle => "Ne eblis ŝargi la agordojn".into(),
+            Self::ConfigOpenFailedTitle => "Ne eblis malfermi la agordan dosieron".into(),
+            Self::DownloadPageOpenFailedTitle => "Ne eblis malfermi la elŝutan paĝon".into(),
+            Self::TrayCreateFailedTitle => "Ne eblis krei la pletan piktogramon".into(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -524,5 +589,21 @@ mod tests {
             consecutive: 3,
         };
         assert_eq!(msg.in_lang(Lang::Ko), "8.8.8.8: 응답 없음 (3회 연속)");
+    }
+
+    #[test]
+    fn supports_esperanto() {
+        assert_eq!(from_locale("eo"), Some(Lang::Eo));
+        assert_eq!(from_locale("eo-001"), Some(Lang::Eo));
+        assert_eq!(LanguageSetting::Eo.resolve(), Lang::Eo);
+
+        let msg = Msg::StatusDown {
+            host: "8.8.8.8",
+            consecutive: 3,
+        };
+        assert_eq!(
+            msg.in_lang(Lang::Eo),
+            "8.8.8.8: neniu respondo (3 sinsekve)"
+        );
     }
 }
