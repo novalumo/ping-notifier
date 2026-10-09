@@ -29,6 +29,9 @@
               cargo
               rustfmt
               clippy
+              cargo-bundle
+              librsvg
+              imagemagick
             ];
           };
         }

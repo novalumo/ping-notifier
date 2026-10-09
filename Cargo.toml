@@ -13,3 +13,23 @@ tao = "0.37.1"
 toml = "1.1.7"
 tray-icon = "0.26.1"
 
+[build-dependencies]
+winresource = "0.1.31"
+
+[package.metadata.bundle]
+name = "Ping Notifier"
+# src/notifier.rs の BUNDLE_ID と一致させること
+identifier = "com.novalumo.ping-notifier"
+short_description = "ping のタイムアウトを検知して通知するメニューバー常駐アプリ"
+osx_minimum_system_version = "11.0"
+osx_info_plist_exts = ["macos/Info.plist.ext"]
+# icons/generate.sh で icons/icon.svg から生成する
+icon = [
+    "icons/png/16x16.png",
+    "icons/png/32x32.png",
+    "icons/png/64x64.png",
+    "icons/png/128x128.png",
+    "icons/png/256x256.png",
+    "icons/png/512x512.png",
+    "icons/png/512x512@2x.png",
+]
