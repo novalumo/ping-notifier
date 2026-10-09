@@ -17,6 +17,7 @@ ping のタイムアウト（パケットロス）を検知して OS の通知�
 - `notifier.rs` — `notify-rust` による通知送信と、macOS での送り主（Bundle ID）設定
 - `updater.rs` — GitHub Releases からの自動アップデート（更新スレッド、検証、OS ごとの置き換えと再起動）
 - `autostart.rs` — ログイン時の自動起動の登録 / 解除（macOS: `SMAppService`、Windows: レジストリの Run キー）
+- `i18n.rs` — 表示言語の決定と、利用者に見せる文言（`Msg`）の英語 / 日本語訳
 - `config.rs` — 設定ファイルの読み込み・初回生成・検証
 - `icon.rs` — 状態アイコン（色付きの円）を実行時に RGBA で描画する
 
@@ -51,9 +52,9 @@ flake は devShell のみで、`nix build` 用の `packages` 出力はない。
 
 ### 設定ファイル
 
-`config::path()` は `dirs::config_dir()` 配下の `ping-notifier/config.toml`（macOS: `~/Library/Application Support/`、Windows: `%APPDATA%`）。不在なら `DEFAULT_CONFIG`（コメント付きの手書き TOML）を書き出す。`serde(deny_unknown_fields)` でキーの打ち間違いを検出する。
+`config::path()` は `dirs::config_dir()` 配下の `ping-notifier/config.toml`（macOS: `~/Library/Application Support/`、Windows: `%APPDATA%`）。不在なら表示言語に応じて `DEFAULT_CONFIG_EN` / `DEFAULT_CONFIG_JA`（コメント付きの手書き TOML）を書き出す。`serde(deny_unknown_fields)` でキーの打ち間違いを検出する。
 
-`DEFAULT_CONFIG` と `Config::default()` は値が一致している必要があり、テストで検証している。キーを追加するときは両方と README の表を更新すること。
+両テンプレートと `Config::default()` は値が一致している必要があり、テストで検証している。キーを追加するときは 3 つすべてと README（英語・日本語）の表を更新すること。
 
 起動時に設定が壊れていてもアプリは終了せず、既定値で起動してエラーを通知する（常駐アプリなので、修正後にメニューから再読み込みしてもらう）。
 
@@ -114,6 +115,15 @@ flake は devShell のみで、`nix build` 用の `packages` 出力はない。
 - 自動アップデートは .app を同じパスで置き換えるので、登録は引き継がれる想定（Bundle ID と Team ID が変わらないため）
 - Windows は `HKCU\...\Run` に引用符付きの exe パスを登録する。登録値が現在の exe パスと一致しなければ無効とみなす。タスクマネージャーの「スタートアップ アプリ」で無効化された状態（`StartupApproved`）までは見ていないため、その場合はメニュー上オンのままになる
 
+### 多言語対応（i18n）
+
+- 対応言語は英語と日本語。既定の `language = "auto"` では OS の優先言語（`sys-locale`）を上から見て最初に対応している言語を使い、なければ英語
+- 文言は `i18n::Msg` のバリアントで、`en()` / `ja()` が網羅的に `match` する。文言を足したら両方に訳を書く（書かないとコンパイルエラー）。言語を足すときは `Lang` にバリアントを足し、`Msg::in_lang` と同様の関数を足す
+- **翻訳するのはメニュー・ツールチップ・通知の見出しと案内文だけ**。ログと anyhow のエラーメッセージ（通知の本文に埋め込まれる詳細を含む）は英語で書く。ログに `Msg` を出すときは `msg.in_lang(Lang::En)` を使う（`report_error` 参照）
+- 表示言語はグローバル（`i18n::set` / `current`）。起動直後は OS の言語、設定を読んだ後は `config.language` で上書きし、「設定を再読み込み」で変わったら `MenuItems::relabel` で全項目を付け直す
+- 初回の設定ファイルは表示言語に合わせて `DEFAULT_CONFIG_EN` / `DEFAULT_CONFIG_JA` を書き出す。キーを追加するときは両方のテンプレートと `Config::default()`、README（英語・日本語）の表を更新する。テストで両テンプレートと既定値の一致を確認している
+- README は英語版（`README.md`）が正、日本語版は `README.ja.md`。内容を変えるときは両方を更新する。リリースノートのテンプレート（`.github/release-notes.md`）も英語を先、日本語を `<details>` 内に置いた二言語構成
+
 ## CI とリリース
 
 | ワークフロー | 契機 | 内容 |
@@ -138,7 +148,8 @@ flake は devShell のみで、`nix build` 用の `packages` 出力はない。
 | 場所 | 対象 |
 | --- | --- |
 | `src/monitor.rs::tests` | しきい値、1 回の障害につき通知 1 回、復旧時のロス回数と停止時間 |
-| `src/config.rs::tests` | `DEFAULT_CONFIG` と `Config::default()` の一致、不正値・未知キーの拒否 |
+| `src/config.rs::tests` | 英語・日本語の初期テンプレートと `Config::default()` の一致、`language` の解釈、不正値・未知キーの拒否 |
+| `src/i18n.rs::tests` | ロケール文字列からの言語判定、優先順位とフォールバック、引数付き文言の整形 |
 | `src/autostart.rs` の Windows 用 tests | Run キーに登録するコマンドの引用符（Windows の CI でのみ実行） |
 | `src/updater.rs::tests` | タグのバージョン解釈と比較、`SHA256SUMS` の解析、SHA-256、OS ごとの配布ファイルの選択 |
 
