@@ -19,6 +19,8 @@ use crate::{log, notifier};
 const REPO: &str = "novalumo/ping-notifier";
 const USER_AGENT: &str = concat!("ping-notifier/", env!("CARGO_PKG_VERSION"));
 const SUMS_ASSET: &str = "SHA256SUMS";
+/// 置き換え後に起動する新しい版へ、更新前のバージョンを伝えるコマンドライン引数
+const UPDATED_FROM_ARG: &str = "--updated-from";
 
 /// 起動直後はネットワークが安定していないことがあるので少し待ってから確認する
 const FIRST_CHECK_DELAY: Duration = Duration::from_secs(30);
@@ -147,11 +149,9 @@ fn check_and_apply(manual: bool, failed: &mut Option<Version>, on_event: &dyn Fn
     log(&format!("installing v{latest}"));
     match install(&release) {
         Ok(relaunch) => {
+            // 完了の通知は再起動後の新しい版が送る（`updated_from` 参照）。
+            // ここで送ると、自身の .app が置き換えで消えているため macOS に拒否される
             log(&format!("installed v{latest}"));
-            notifier::notify(
-                &t(Msg::UpdatedTitle),
-                &t(Msg::UpdatedBody { version: &latest }),
-            );
             on_event(UpdateEvent::Installed {
                 version: latest,
                 relaunch,
@@ -183,9 +183,18 @@ pub fn cleanup_previous() {
     platform::cleanup_previous();
 }
 
-/// 置き換え後のアプリを起動する。呼び出し側はこの後すぐに終了すること
+/// 置き換え後のアプリを起動する。呼び出し側はこの後すぐに終了すること。
+/// 新しい版には更新前のバージョンを引数で渡し、起動後に完了を通知させる
 pub fn relaunch(path: &Path) -> Result<()> {
-    platform::relaunch(path)
+    platform::relaunch(path, &current_version())
+}
+
+/// 自動アップデートの再起動で起動された場合、更新前のバージョンを返す。
+/// 引数にはプログラム名を含めないこと
+pub fn updated_from(args: impl IntoIterator<Item = String>) -> Option<Version> {
+    let mut args = args.into_iter();
+    args.find(|a| a == UPDATED_FROM_ARG)?;
+    Version::parse(&args.next()?).ok()
 }
 
 fn agent() -> ureq::Agent {
@@ -285,7 +294,9 @@ mod platform {
     use std::process::{Command, Output};
 
     use anyhow::{Context, Result, bail, ensure};
+    use semver::Version;
 
+    use super::UPDATED_FROM_ARG;
     use crate::{log, notifier};
 
     /// コマンドを実行し、失敗したら標準エラー出力を含めてエラーにする
@@ -419,14 +430,21 @@ mod platform {
             .map(str::to_string))
     }
 
-    pub fn relaunch(app: &Path) -> Result<()> {
+    pub fn relaunch(app: &Path, from: &Version) -> Result<()> {
         // 自身が動いているうちに新しいインスタンスを起動し、成功を確認してから終了する。
         // 終了後に子プロセスから open すると、置き換え直後の .app に対する Gatekeeper の
         // 初回起動処理で要求元（終了済みの自身）が見つからず -600 (procNotFound) で失敗し、
         // アプリが起動しないまま消えることがあった。
         // -n を付けないと、同じ Bundle ID の自身が前面に出るだけで新しい版が起動しない
-        run_checked(Command::new("open").arg("-n").arg(app))
-            .context("cannot launch the new version")?;
+        run_checked(
+            Command::new("open")
+                .arg("-n")
+                .arg(app)
+                .arg("--args")
+                .arg(UPDATED_FROM_ARG)
+                .arg(from.to_string()),
+        )
+        .context("cannot launch the new version")?;
         Ok(())
     }
 }
@@ -439,6 +457,9 @@ mod platform {
     use std::process::Command;
 
     use anyhow::{Context, Result};
+    use semver::Version;
+
+    use super::UPDATED_FROM_ARG;
 
     const EXE_NAME: &str = "ping-notifier.exe";
 
@@ -484,8 +505,10 @@ mod platform {
         Ok(exe)
     }
 
-    pub fn relaunch(exe: &Path) -> Result<()> {
+    pub fn relaunch(exe: &Path, from: &Version) -> Result<()> {
         Command::new(exe)
+            .arg(UPDATED_FROM_ARG)
+            .arg(from.to_string())
             .spawn()
             .context("cannot launch the new version")?;
         Ok(())
@@ -497,6 +520,7 @@ mod platform {
     use std::path::{Path, PathBuf};
 
     use anyhow::{Result, bail};
+    use semver::Version;
 
     pub fn can_self_update() -> bool {
         false
@@ -508,7 +532,7 @@ mod platform {
         bail!("automatic updates are not supported on this OS")
     }
 
-    pub fn relaunch(_path: &Path) -> Result<()> {
+    pub fn relaunch(_path: &Path, _from: &Version) -> Result<()> {
         bail!("automatic updates are not supported on this OS")
     }
 }
@@ -516,6 +540,23 @@ mod platform {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_previous_version_from_relaunch_args() {
+        let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            updated_from(args(&["--updated-from", "0.5.0"])),
+            Some(Version::new(0, 5, 0))
+        );
+        // macOS の古い版などが付ける別の引数が混ざっていても拾う
+        assert_eq!(
+            updated_from(args(&["-psn_0_12345", "--updated-from", "1.2.3"])),
+            Some(Version::new(1, 2, 3))
+        );
+        assert_eq!(updated_from(args(&[])), None);
+        assert_eq!(updated_from(args(&["--updated-from"])), None);
+        assert_eq!(updated_from(args(&["--updated-from", "latest"])), None);
+    }
 
     #[test]
     fn parses_tag_with_or_without_prefix() {

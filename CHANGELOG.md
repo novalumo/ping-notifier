@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- macOS: the "Updated" notification was not shown after an automatic update. The new version now shows it after restarting (from the next update after this version)
+
 ## [0.5.1] - 2026-10-09
 
 ### Changed

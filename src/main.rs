@@ -47,6 +47,23 @@ fn main() -> Result<()> {
     });
     i18n::set(config.language.resolve());
 
+    // 自動アップデートで再起動された場合は、新しい版から完了を知らせる。
+    // 置き換え前の版から送ると、自身の .app が消えた後になるため macOS に拒否される
+    if let Some(from) = updater::updated_from(std::env::args().skip(1)) {
+        let to = updater::current_version();
+        log(&format!("updated from v{from} to v{to}"));
+        // 通知の送信は配送の確認で数秒ブロックすることがあるため、起動を待たせないよう別スレッドで送る
+        std::thread::spawn(move || {
+            notifier::notify(
+                &t(Msg::UpdatedTitle),
+                &t(Msg::UpdatedBody {
+                    from: &from,
+                    to: &to,
+                }),
+            );
+        });
+    }
+
     #[allow(unused_mut)]
     let mut event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
     #[cfg(target_os = "macos")]
@@ -127,7 +144,8 @@ fn main() -> Result<()> {
                         tray.take();
                         *control_flow = ControlFlow::Exit;
                     }
-                    // 置き換え自体は済んでいるので、次回起動時に新しいバージョンになる
+                    // 置き換え自体は済んでいるので、次回起動時に新しいバージョンになる。
+                    // macOS では自身の .app が既に消えているため、この通知は拒否されることがある
                     Err(e) => report_error(Msg::RelaunchFailedTitle, &e),
                 }
             }
