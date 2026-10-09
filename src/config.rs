@@ -18,7 +18,7 @@ use crate::i18n::{self, Lang, LanguageSetting};
 const DEFAULT_CONFIG_EN: &str = r#"# Ping Notifier settings
 # After editing, choose "Reload Settings" from the menu to apply your changes.
 
-# Display language: "auto" (follow the OS) or one of "en", "ja", "zh", "ko", "eo"
+# Display language: "auto" (follow the OS) or one of "en", "ja", "zh", "ko", "eo", "de"
 language = "auto"
 
 # Host name or IP address to monitor
@@ -45,7 +45,7 @@ auto_update = true
 const DEFAULT_CONFIG_JA: &str = r#"# Ping Notifier の設定
 # 変更後はメニューの「設定を再読み込み」で反映されます
 
-# 表示言語: "auto"（OS の言語に合わせる）または "en"、"ja"、"zh"、"ko"、"eo"
+# 表示言語: "auto"（OS の言語に合わせる）または "en"、"ja"、"zh"、"ko"、"eo"、"de"
 language = "auto"
 
 # 監視対象のホスト名または IP アドレス
@@ -72,7 +72,7 @@ auto_update = true
 const DEFAULT_CONFIG_ZH: &str = r#"# Ping Notifier 设置
 # 修改后，请在菜单中选择“重新加载设置”使更改生效。
 
-# 显示语言："auto"（跟随系统）或以下之一："en"、"ja"、"zh"、"ko"、"eo"
+# 显示语言："auto"（跟随系统）或以下之一："en"、"ja"、"zh"、"ko"、"eo"、"de"
 language = "auto"
 
 # 要监控的主机名或 IP 地址
@@ -99,7 +99,7 @@ auto_update = true
 const DEFAULT_CONFIG_KO: &str = r#"# Ping Notifier 설정
 # 수정한 후 메뉴에서 "설정 다시 불러오기"를 선택하면 반영됩니다.
 
-# 표시 언어: "auto"(OS 언어를 따름) 또는 다음 중 하나: "en", "ja", "zh", "ko", "eo"
+# 표시 언어: "auto"(OS 언어를 따름) 또는 다음 중 하나: "en", "ja", "zh", "ko", "eo", "de"
 language = "auto"
 
 # 모니터링할 호스트 이름 또는 IP 주소
@@ -126,7 +126,7 @@ auto_update = true
 const DEFAULT_CONFIG_EO: &str = r#"# Agordoj de Ping Notifier
 # Post redaktado, elektu "Reŝargi agordojn" en la menuo por apliki la ŝanĝojn.
 
-# Lingvo de la interfaco: "auto" (laŭ la operaciumo) aŭ unu el "en", "ja", "zh", "ko", "eo"
+# Lingvo de la interfaco: "auto" (laŭ la operaciumo) aŭ unu el "en", "ja", "zh", "ko", "eo", "de"
 language = "auto"
 
 # Kontrolota gastiga nomo aŭ IP-adreso
@@ -147,6 +147,33 @@ notify_recovery = true
 
 # Aŭtomate instali novajn versiojn
 # Eĉ se false, vi povas ĝisdatigi permane per "Serĉi ĝisdatigojn" en la menuo.
+auto_update = true
+"#;
+
+const DEFAULT_CONFIG_DE: &str = r#"# Einstellungen für Ping Notifier
+# Wähle nach dem Bearbeiten „Einstellungen neu laden“ im Menü, um die Änderungen zu übernehmen.
+
+# Anzeigesprache: "auto" (wie das Betriebssystem) oder einer der Werte "en", "ja", "zh", "ko", "eo", "de"
+language = "auto"
+
+# Zu überwachender Host (Hostname oder IP-Adresse)
+host = "8.8.8.8"
+
+# Abstand zwischen den Pings (Sekunden)
+interval_secs = 1.0
+
+# Wie lange auf eine Antwort gewartet wird (Millisekunden). Bleibt sie in dieser Zeit aus, gilt das als Paketverlust.
+# Unter macOS wird auf ganze Sekunden aufgerundet.
+timeout_ms = 1000
+
+# Anzahl aufeinanderfolgender Verluste, ab der benachrichtigt wird
+threshold = 1
+
+# Auch benachrichtigen, wenn die Verbindung wiederhergestellt ist
+notify_recovery = true
+
+# Neue Versionen automatisch installieren
+# Auch bei false kannst du über „Nach Updates suchen“ im Menü manuell aktualisieren.
 auto_update = true
 "#;
 
@@ -209,6 +236,7 @@ fn default_config(lang: Lang) -> &'static str {
         Lang::Zh => DEFAULT_CONFIG_ZH,
         Lang::Ko => DEFAULT_CONFIG_KO,
         Lang::Eo => DEFAULT_CONFIG_EO,
+        Lang::De => DEFAULT_CONFIG_DE,
     }
 }
 

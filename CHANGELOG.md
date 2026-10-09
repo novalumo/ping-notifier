@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Simplified Chinese display language (`language = "zh"`). With `"auto"`, Traditional Chinese locales are not matched
 - Korean display language (`language = "ko"`)
 - Esperanto display language (`language = "eo"`)
+- German display language (`language = "de"`)
 
 ## [0.5.2] - 2026-10-09
 
