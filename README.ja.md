@@ -39,7 +39,7 @@ flake はソースからビルドする。`$out/Applications/Ping Notifier.app` 
 
 | OS | ファイル |
 | --- | --- |
-| macOS（Apple Silicon / Intel） | `PingNotifier-<version>-macos-universal.zip` |
+| macOS（Apple Silicon） | `PingNotifier-<version>-macos-arm64.zip` |
 | Windows（x64） | `PingNotifier-<version>-windows-x64.zip` |
 
 署名・公証が済んでいない版では、初回起動時に OS の警告が出る。回避手順は各リリースのノート（`.github/release-notes.md`）を参照。一度インストールすれば、以降は自動でアップデートされる。

@@ -97,7 +97,7 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 ### 自動アップデート
 
 - `updater.rs` は `api.github.com/repos/siraken/ping-notifier/releases/latest` を認証なしで読む。リポジトリが非公開だと 404 になり更新できない
-- 配布ファイル名（`PingNotifier-<ver>-macos-universal.zip` / `-windows-x64.zip`）と `SHA256SUMS` はアップデータとリリースワークフローの間の契約。どちらかを変えるときは両方を合わせること
+- 配布ファイル名（`PingNotifier-<ver>-macos-arm64.zip` / `-windows-x64.zip`）と `SHA256SUMS` はアップデータとリリースワークフローの間の契約。どちらかを変えるときは両方を合わせること
 - 検証: `SHA256SUMS` のハッシュ照合に加え、macOS では Bundle ID・`codesign --verify --deep --strict`・（実行中のアプリが Developer ID 署名なら）同一 Team ID の要件を確認する。Windows は署名がないのでハッシュ照合のみ
 - macOS の置き換えは `.app` と同じディレクトリに `.ping-notifier-update/` を作り、`ditto` で展開して `rename` で入れ替える（同一ボリューム内で原子的に入れ替えるため）。署名済み `.app` の展開に `unzip` や `zip` クレートを使うと拡張属性やシンボリックリンクが崩れて署名が壊れるので `ditto` を使う
 - macOS の再起動は、**自身が動いているうちに** `open -n` で新しい版を起動し、成功を確認してから終了する。以前は子プロセスの `/bin/sh` で自身の終了を待ってから `open` していたが、置き換え直後の .app に対する Gatekeeper の初回起動処理（CoreServicesUIAgent の quarantine-resolver）で要求元の自身が既に存在せず `-600 procNotFound` で失敗し、アプリが消えたまま起動しないことがあった（v0.3.0 で発生）。`-n` がないと同じ Bundle ID の自身が前面に出るだけになる。新旧が一瞬同時に動くのは許容している
@@ -108,7 +108,7 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 
 ### Nix パッケージ
 
-- 対象は `aarch64-darwin` のみ。Intel Mac は今後廃止されるため、はじめから対応しない（配布物の zip は universal のまま）
+- 対象は `aarch64-darwin` のみ（配布物と同じく Intel Mac には対応しない）
 - `nix/package.nix` は `buildRustPackage` でソースからビルドし、`cargo bundle` で `.app` を作って `$out/Applications` に置く。バージョンは `Cargo.toml` から読む。`cargoLock.lockFile` を使うので、依存を変えても Nix 側のハッシュ更新は不要
 - `$out/bin/ping-notifier` は `.app` 内の実行ファイルを `exec` するシェルスクリプト。バイナリを直接 `bin` に置くと `.app` 外の起動と判定され、通知がターミナル.app 名義になり、ログイン時の起動も使えなくなる
 - ビルド時に `PING_NOTIFIER_DISABLE_SELF_UPDATE` を設定し、`updater::can_self_update` が `false` を返すようにしている（`option_env!` でコンパイル時に埋め込む）。`/nix/store` は読み取り専用で、更新は Nix が担うため。新版の通知とダウンロードページの案内は残る
@@ -140,10 +140,10 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 | ワークフロー | 契機 | 内容 |
 | --- | --- | --- |
 | `.github/workflows/ci.yml` | main への push、PR | macOS / Windows で `fmt --check`・`clippy -D warnings`・`test` |
-| `.github/workflows/release.yml` | `v*` タグの push、手動実行 | macOS universal `.app` と Windows x64 `.exe` を zip 化。タグ時のみ GitHub Release を作成 |
+| `.github/workflows/release.yml` | `v*` タグの push、手動実行 | macOS（Apple Silicon）の `.app` と Windows x64 `.exe` を zip 化。タグ時のみ GitHub Release を作成 |
 
 - CI は Nix を使わず `dtolnay/rust-toolchain@stable` を使う（Windows ランナーで Nix が使えないため）。`cargo-bundle` は `cargo install` で入れる
-- macOS は `aarch64` と `x86_64` を別々にビルドし、`cargo bundle --target aarch64-apple-darwin` で作った `.app` のバイナリを `lipo` で結合した universal バイナリに差し替えてから ad-hoc 署名する。差し替え後に署名し直さないと署名が壊れる
+- macOS は Apple Silicon（`aarch64-apple-darwin`）のみ。Intel Mac は今後廃止されるため対応しない（v0.4.0 までは `lipo` で結合した universal を `-macos-universal.zip` として配布していた）。`cargo bundle` は `--locked` を受け付けないので、先に `cargo build --locked` しておく
 - リリースはタグと `Cargo.toml` の `version` の一致を検証する。バージョンを上げるときは `Cargo.toml` を更新してからタグを打つ
 - Release 本文は `.github/release-notes.md`（インストール手順）に、GitHub の自動生成ノートを連結したもの
 - macOS は Secrets（`MACOS_CERTIFICATE_P12` ほか。README 参照）が登録されていれば Developer ID 署名（ハードンドランタイム + タイムスタンプ）→ `notarytool` で公証 → `stapler` で添付する。未登録なら ad-hoc 署名で配布し、ワークフローに警告を出す

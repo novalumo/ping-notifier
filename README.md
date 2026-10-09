@@ -39,7 +39,7 @@ Download the file for your OS from [Releases](https://github.com/siraken/ping-no
 
 | OS | File |
 | --- | --- |
-| macOS (Apple Silicon / Intel) | `PingNotifier-<version>-macos-universal.zip` |
+| macOS (Apple Silicon) | `PingNotifier-<version>-macos-arm64.zip` |
 | Windows (x64) | `PingNotifier-<version>-windows-x64.zip` |
 
 Versions that are not signed and notarized show an OS warning on first launch. See the release notes (`.github/release-notes.md`) for how to proceed. Once installed, the app keeps itself up to date.

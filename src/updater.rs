@@ -27,7 +27,7 @@ const HTTP_TIMEOUT: Duration = Duration::from_secs(120);
 const MAX_DOWNLOAD_BYTES: u64 = 100 * 1024 * 1024;
 
 #[cfg(target_os = "macos")]
-const ASSET_SUFFIX: &str = "-macos-universal.zip";
+const ASSET_SUFFIX: &str = "-macos-arm64.zip";
 #[cfg(target_os = "windows")]
 const ASSET_SUFFIX: &str = "-windows-x64.zip";
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
@@ -533,11 +533,11 @@ mod tests {
     #[test]
     fn finds_hash_in_sha256sums() {
         let sums = "\
-aaa111  PingNotifier-0.2.0-macos-universal.zip
+aaa111  PingNotifier-0.2.0-macos-arm64.zip
 bbb222 *PingNotifier-0.2.0-windows-x64.zip
 ";
         assert_eq!(
-            expected_hash(sums, "PingNotifier-0.2.0-macos-universal.zip"),
+            expected_hash(sums, "PingNotifier-0.2.0-macos-arm64.zip"),
             Some("aaa111")
         );
         assert_eq!(
