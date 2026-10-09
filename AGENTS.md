@@ -13,7 +13,7 @@ ping のタイムアウト（パケットロス）を検知して OS の通知�
 - `main.rs` — `tao` のイベントループと `tray-icon` のメニューバーアイコン / メニュー。監視スレッドからの `Status` を受けてアイコン色とメニュー文言を更新する
 - `worker.rs` — 監視スレッド。`ping` → `Monitor` → 通知を回し、UI からの `Command`（一時停止 / 設定再読み込み）を `mpsc` で受ける。待機に `recv_timeout` を使うので指示は即座に反映される
 - `monitor.rs` — ping 結果の列から「ロス発生」「復旧」を判定する状態機械。副作用を持たない
-- `ping.rs` — OS 標準の `ping` コマンドを 1 回実行して疎通を判定する
+- `ping.rs` — OS 標準の `ping` コマンドを 1 回実行して疎通を判定し、出力から応答時間を読み取る
 - `notifier.rs` — `notify-rust` による通知送信と、macOS での送り主（Bundle ID）設定
 - `updater.rs` — GitHub Releases からの自動アップデート（更新スレッド、検証、OS ごとの置き換えと再起動）
 - `autostart.rs` — ログイン時の自動起動の登録 / 解除（macOS: `SMAppService`、Windows: レジストリの Run キー）
@@ -74,6 +74,7 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 - macOS の `-W` はミリ秒単位だが、`-c 1 -W` だけだと「`-W` + 約 1 秒」待ってから終了する。全体のタイムアウト `-t`（秒単位）も併用している。そのため実効タイムアウトは秒単位に切り上がる
 - Linux の `-W` は秒単位
 - Windows の `ping` は「宛先ホストに到達できません」でも終了コード 0 を返すため、出力に `TTL=` が含まれるかも確認する（日本語版でも同じ表記）
+- 応答時間は `ping` の出力から `parse_rtt` で読み取る。見出しの語（`time` / `時間` / `Zeit` など）は OS の言語で変わり、Windows の出力は OEM コードページ（日本語版は CP932）で UTF-8 として読むと崩れるため、見出しは見ずに `=` か `<` の直後の「数値 + `ms`」を探している（`time<1ms` は 1 ms 未満として扱う）。読み取れなくても疎通判定には影響せず、応答時間を表示しないだけ。プロセスの起動から終了までを自前で計ると起動時間が混ざるので使わない
 - Windows では `CREATE_NO_WINDOW` を付けて起動する。リリースビルドは `windows_subsystem = "windows"` の GUI アプリなので、付けないと ping のたびにコンソールが一瞬表示される
 - ロスを手元で再現するには、到達不能な TEST-NET アドレス `192.0.2.1` を監視対象にする
 
@@ -166,13 +167,14 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 
 | 場所 | 対象 |
 | --- | --- |
+| `src/ping.rs::tests` | macOS・Linux・Windows（各言語版）の出力からの応答時間の読み取り |
 | `src/monitor.rs::tests` | しきい値、1 回の障害につき通知 1 回、復旧時のロス回数と停止時間 |
 | `src/config.rs::tests` | 全言語の初期テンプレートと `Config::default()` の一致、`language` の解釈、不正値・未知キーの拒否 |
 | `src/i18n.rs::tests` | ロケール文字列からの言語判定、優先順位とフォールバック、引数付き文言の整形 |
 | `src/autostart.rs` の Windows 用 tests | Run キーに登録するコマンドの引用符（Windows の CI でのみ実行） |
 | `src/updater.rs::tests` | タグのバージョン解釈と比較、`SHA256SUMS` の解析、SHA-256、OS ごとの配布ファイルの選択 |
 
-`ping.rs`・`notifier.rs`・UI・アップデートの置き換え処理は OS やネットワークに依存するため自動テストはない。変更したら実機で確認すること。macOS では `.app` を作って起動し、`192.0.2.1` を監視する設定で通知が出るかを見る。
+`ping.rs` のコマンド実行・`notifier.rs`・UI・アップデートの置き換え処理は OS やネットワークに依存するため自動テストはない。変更したら実機で確認すること。macOS では `.app` を作って起動し、`192.0.2.1` を監視する設定で通知が出るかを見る。
 
 自動アップデートはリリースせずに確認できる。`Cargo.toml` の `version` を最新リリースより下げたコピーで `cargo bundle` → ad-hoc 署名した `.app` を作業用ディレクトリに置き、中の実行ファイルを直接起動すると、30 秒後に最新リリースへ置き換わって再起動する（ad-hoc 署名の版は Team ID の照合を省くため）。通知が届いたかは `log show --predicate 'process == "usernoted"'` で `Denying` や `Presenting` を探すと分かる。終わったら上記のとおりログイン項目の登録先を戻すこと
 

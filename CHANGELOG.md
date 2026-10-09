@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- The latest response time (RTT) is shown in the menu and the tooltip, e.g. "8.8.8.8: OK (12 ms)"
+
 ## [0.6.0] - 2026-10-09
 
 ### Added

@@ -128,11 +128,19 @@ fn main() -> Result<()> {
                 if last_status.as_ref() == Some(&status) {
                     return;
                 }
+                let previous = last_status.as_ref().map(describe);
                 let (color, text) = describe(&status);
-                items.status.set_text(&text);
-                if let Some(tray) = &tray {
+                // 応答時間は毎回変わるので、変わった部分だけ反映する
+                if previous.as_ref().map(|p| &p.1) != Some(&text) {
+                    items.status.set_text(&text);
+                    if let Some(tray) = &tray {
+                        let _ = tray.set_tooltip(Some(tooltip(&text)));
+                    }
+                }
+                if previous.map(|p| p.0) != Some(color)
+                    && let Some(tray) = &tray
+                {
                     let _ = tray.set_icon(Some(icon::circle(color)));
-                    let _ = tray.set_tooltip(Some(tooltip(&text)));
                 }
                 last_status = Some(status);
             }
@@ -322,7 +330,11 @@ fn toggle_autostart(item: &CheckMenuItem) {
 fn describe(status: &Status) -> ([u8; 3], String) {
     match status {
         Status::Paused => (icon::GRAY, t(Msg::StatusPaused)),
-        Status::Up { host } => (icon::GREEN, t(Msg::StatusUp { host })),
+        Status::Up { host, rtt: None } => (icon::GREEN, t(Msg::StatusUp { host })),
+        Status::Up {
+            host,
+            rtt: Some(rtt),
+        } => (icon::GREEN, t(Msg::StatusUpRtt { host, rtt: *rtt })),
         Status::Down { host, consecutive } => (
             icon::RED,
             t(Msg::StatusDown {

@@ -7,6 +7,7 @@
 //! ログとエラーの詳細（anyhow のメッセージ）は、Issue などで共有されても読めるよう英語に固定している。
 
 use std::sync::atomic::{AtomicU8, Ordering};
+use std::time::Duration;
 
 use semver::Version;
 use serde::Deserialize;
@@ -116,6 +117,15 @@ pub fn t(msg: Msg) -> String {
     msg.in_lang(current())
 }
 
+/// 応答時間の表示（`12 ms`、1 ms 未満は `<1 ms`）。単位の表記は全言語で共通
+fn rtt_text(rtt: Duration) -> String {
+    if rtt < Duration::from_millis(1) {
+        "<1 ms".into()
+    } else {
+        format!("{} ms", (rtt.as_secs_f64() * 1000.0).round())
+    }
+}
+
 /// 利用者に見せる文言
 #[derive(Debug, Clone, Copy)]
 pub enum Msg<'a> {
@@ -134,6 +144,7 @@ pub enum Msg<'a> {
     // 監視の状態（メニュー先頭とツールチップ）
     StatusPaused,
     StatusUp { host: &'a str },
+    StatusUpRtt { host: &'a str, rtt: Duration },
     StatusDown { host: &'a str, consecutive: u32 },
     StatusPingError { host: &'a str },
 
@@ -195,6 +206,7 @@ impl Msg<'_> {
 
             Self::StatusPaused => "Paused".into(),
             Self::StatusUp { host } => format!("{host}: OK"),
+            Self::StatusUpRtt { host, rtt } => format!("{host}: OK ({})", rtt_text(rtt)),
             Self::StatusDown { host, consecutive } => {
                 format!("{host}: no response ({consecutive} in a row)")
             }
@@ -253,6 +265,7 @@ impl Msg<'_> {
 
             Self::StatusPaused => "一時停止中".into(),
             Self::StatusUp { host } => format!("{host}: 正常"),
+            Self::StatusUpRtt { host, rtt } => format!("{host}: 正常（{}）", rtt_text(rtt)),
             Self::StatusDown { host, consecutive } => {
                 format!("{host}: 応答なし（{consecutive} 回連続）")
             }
@@ -313,6 +326,7 @@ impl Msg<'_> {
 
             Self::StatusPaused => "已暂停".into(),
             Self::StatusUp { host } => format!("{host}: 正常"),
+            Self::StatusUpRtt { host, rtt } => format!("{host}: 正常（{}）", rtt_text(rtt)),
             Self::StatusDown { host, consecutive } => {
                 format!("{host}: 无响应（连续 {consecutive} 次）")
             }
@@ -371,6 +385,7 @@ impl Msg<'_> {
 
             Self::StatusPaused => "일시 정지됨".into(),
             Self::StatusUp { host } => format!("{host}: 정상"),
+            Self::StatusUpRtt { host, rtt } => format!("{host}: 정상 ({})", rtt_text(rtt)),
             Self::StatusDown { host, consecutive } => {
                 format!("{host}: 응답 없음 ({consecutive}회 연속)")
             }
@@ -433,6 +448,7 @@ impl Msg<'_> {
 
             Self::StatusPaused => "Paŭzita".into(),
             Self::StatusUp { host } => format!("{host}: en ordo"),
+            Self::StatusUpRtt { host, rtt } => format!("{host}: en ordo ({})", rtt_text(rtt)),
             Self::StatusDown { host, consecutive } => {
                 format!("{host}: neniu respondo ({consecutive} sinsekve)")
             }
@@ -495,6 +511,7 @@ impl Msg<'_> {
 
             Self::StatusPaused => "Pausiert".into(),
             Self::StatusUp { host } => format!("{host}: OK"),
+            Self::StatusUpRtt { host, rtt } => format!("{host}: OK ({})", rtt_text(rtt)),
             Self::StatusDown { host, consecutive } => {
                 format!("{host}: keine Antwort ({consecutive}-mal in Folge)")
             }
@@ -606,6 +623,18 @@ mod tests {
         };
         assert_eq!(msg.in_lang(Lang::En), "8.8.8.8: no response (3 in a row)");
         assert_eq!(msg.in_lang(Lang::Ja), "8.8.8.8: 応答なし（3 回連続）");
+
+        let msg = Msg::StatusUpRtt {
+            host: "8.8.8.8",
+            rtt: Duration::from_micros(12_345),
+        };
+        assert_eq!(msg.in_lang(Lang::En), "8.8.8.8: OK (12 ms)");
+        assert_eq!(msg.in_lang(Lang::Ja), "8.8.8.8: 正常（12 ms）");
+        let msg = Msg::StatusUpRtt {
+            host: "8.8.8.8",
+            rtt: Duration::from_micros(450),
+        };
+        assert_eq!(msg.in_lang(Lang::En), "8.8.8.8: OK (<1 ms)");
 
         let (from, to) = (Version::new(0, 5, 0), Version::new(0, 5, 1));
         let msg = Msg::UpdatedBody {
