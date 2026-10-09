@@ -4,12 +4,11 @@
 //! macOS では展開した `.app` の署名も検証してから、実行中のアプリを置き換えて再起動する。
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::thread;
 use std::time::Duration;
 
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
 use semver::Version;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -270,30 +269,29 @@ fn sha256_hex(data: &[u8]) -> String {
         .collect()
 }
 
-/// コマンドを実行し、失敗したら標準エラー出力を含めてエラーにする
-fn run_checked(cmd: &mut Command) -> Result<std::process::Output> {
-    let output = cmd
-        .output()
-        .with_context(|| format!("{cmd:?} を実行できません"))?;
-    if !output.status.success() {
-        bail!(
-            "{cmd:?} が失敗しました: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
-    }
-    Ok(output)
-}
-
 #[cfg(target_os = "macos")]
 mod platform {
     use std::fs;
     use std::path::{Path, PathBuf};
-    use std::process::Command;
+    use std::process::{Command, Output};
 
-    use anyhow::{Context, Result, ensure};
+    use anyhow::{Context, Result, bail, ensure};
 
-    use super::run_checked;
     use crate::{log, notifier};
+
+    /// コマンドを実行し、失敗したら標準エラー出力を含めてエラーにする
+    fn run_checked(cmd: &mut Command) -> Result<Output> {
+        let output = cmd
+            .output()
+            .with_context(|| format!("{cmd:?} を実行できません"))?;
+        if !output.status.success() {
+            bail!(
+                "{cmd:?} が失敗しました: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+        }
+        Ok(output)
+    }
 
     /// 作業用ディレクトリ。`rename` で置き換えられるよう、.app と同じディレクトリに作る
     const WORK_DIR: &str = ".ping-notifier-update";
