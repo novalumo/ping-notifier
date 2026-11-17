@@ -37,6 +37,9 @@ threshold = 1
 # Also notify when the connection is restored
 notify_recovery = true
 
+# Play a sound with the packet loss notification (follows the OS notification sound settings)
+loss_sound = true
+
 # Notify when the response time stays above this value (milliseconds).
 # Disabled by default. Remove the leading # to enable.
 # latency_threshold_ms = 200
@@ -70,6 +73,9 @@ threshold = 1
 
 # 復旧時にも通知するか
 notify_recovery = true
+
+# パケットロスの通知で音を鳴らすか（OS の通知音の設定に従います）
+loss_sound = true
 
 # 応答時間がこの値（ミリ秒）を超える状態が続いたら通知する
 # 既定では無効。行頭の # を外すと有効になります
@@ -105,6 +111,9 @@ threshold = 1
 # 连接恢复时是否也发送通知
 notify_recovery = true
 
+# 丢包通知时是否播放声音（遵循系统的通知声音设置）
+loss_sound = true
+
 # 响应时间持续超过此值（毫秒）时发送通知
 # 默认禁用。删除行首的 # 即可启用。
 # latency_threshold_ms = 200
@@ -138,6 +147,9 @@ threshold = 1
 
 # 연결이 복구되었을 때도 알림을 보낼지
 notify_recovery = true
+
+# 패킷 손실 알림에서 소리를 낼지 (OS의 알림 소리 설정을 따릅니다)
+loss_sound = true
 
 # 응답 시간이 이 값(밀리초)을 넘는 상태가 계속되면 알림을 보낼지
 # 기본값은 비활성화입니다. 줄 앞의 #을 지우면 활성화됩니다.
@@ -173,6 +185,9 @@ threshold = 1
 # Sciigi ankaŭ kiam la konekto restariĝas
 notify_recovery = true
 
+# Ludi sonon kun la sciigo pri perdo de pakoj (laŭ la sonaj agordoj de sciigoj en la operaciumo)
+loss_sound = true
+
 # Sciigi kiam la respondtempo daŭre superas ĉi tiun valoron (milisekundoj).
 # Malŝaltita defaŭlte. Forigu la komencan # por ŝalti ĝin.
 # latency_threshold_ms = 200
@@ -207,6 +222,9 @@ threshold = 1
 # Auch benachrichtigen, wenn die Verbindung wiederhergestellt ist
 notify_recovery = true
 
+# Bei der Benachrichtigung über Paketverlust einen Ton abspielen (richtet sich nach den Benachrichtigungstönen des Betriebssystems)
+loss_sound = true
+
 # Benachrichtigen, wenn die Antwortzeit dauerhaft über diesem Wert liegt (Millisekunden).
 # Standardmäßig deaktiviert. Entferne das # am Zeilenanfang, um es zu aktivieren.
 # latency_threshold_ms = 200
@@ -227,6 +245,8 @@ pub struct Config {
     pub timeout_ms: u64,
     pub threshold: u32,
     pub notify_recovery: bool,
+    /// パケットロスの通知で音を鳴らすか
+    pub loss_sound: bool,
     /// 応答時間のしきい値（ミリ秒）。`None` なら遅延の通知は無効
     pub latency_threshold_ms: Option<u64>,
     pub latency_consecutive: u32,
@@ -242,6 +262,7 @@ impl Default for Config {
             timeout_ms: 1000,
             threshold: 1,
             notify_recovery: true,
+            loss_sound: true,
             latency_threshold_ms: None,
             latency_consecutive: 5,
             auto_update: true,
@@ -331,6 +352,7 @@ mod tests {
             assert_eq!(parsed.timeout_ms, default.timeout_ms, "{lang:?}");
             assert_eq!(parsed.threshold, default.threshold, "{lang:?}");
             assert_eq!(parsed.notify_recovery, default.notify_recovery, "{lang:?}");
+            assert_eq!(parsed.loss_sound, default.loss_sound, "{lang:?}");
             assert_eq!(
                 parsed.latency_threshold_ms, default.latency_threshold_ms,
                 "{lang:?}"

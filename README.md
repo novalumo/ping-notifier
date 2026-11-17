@@ -150,6 +150,7 @@ A settings file is created at the following location on first launch. Edit it vi
 | `timeout_ms` | `1000` | How long to wait for a reply (milliseconds). No reply within this time counts as packet loss |
 | `threshold` | `1` | Number of consecutive losses before notifying |
 | `notify_recovery` | `true` | Also notify when the connection is restored (and when latency is back to normal) |
+| `loss_sound` | `true` | Play a sound with the packet loss notification. It follows the OS notification sound settings |
 | `latency_threshold_ms` | not set | Notify when the response time stays above this value (milliseconds). Not set = disabled |
 | `latency_consecutive` | `5` | Number of consecutive replies above `latency_threshold_ms` before notifying. The same count of replies at or below it is needed to treat latency as back to normal |
 | `auto_update` | `true` | Install new versions automatically |

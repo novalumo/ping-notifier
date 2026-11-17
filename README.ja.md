@@ -150,6 +150,7 @@ cp -R "target/release/bundle/osx/Ping Notifier.app" /Applications/
 | `timeout_ms` | `1000` | 応答待ち時間（ミリ秒）。超えたらロスとみなす |
 | `threshold` | `1` | 何回連続でロスしたら通知するか |
 | `notify_recovery` | `true` | 復旧時（遅延の解消時を含む）にも通知するか |
+| `loss_sound` | `true` | パケットロスの通知で音を鳴らすか。OS の通知音の設定に従う |
 | `latency_threshold_ms` | なし | 応答時間がこの値（ミリ秒）を超える状態が続いたら通知する。書かなければ無効 |
 | `latency_consecutive` | `5` | 何回連続で `latency_threshold_ms` を超えたら通知するか。同じ回数続けて下回ると解消とみなす |
 | `auto_update` | `true` | 新しいバージョンを自動でインストールするか |
