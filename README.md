@@ -42,7 +42,7 @@ Download the file for your OS from [Releases](https://github.com/novalumo/ping-n
 
 | OS | File |
 | --- | --- |
-| macOS (Apple Silicon) | `PingNotifier-<version>-macos-arm64.zip` |
+| macOS 12 or later (Apple Silicon) | `PingNotifier-<version>-macos-arm64.zip` |
 | Windows (x64) | `PingNotifier-<version>-windows-x64.zip` |
 
 Versions that are not signed and notarized show an OS warning on first launch. See the release notes (`.github/release-notes.md`) for how to proceed. Once installed, the app keeps itself up to date.
@@ -185,7 +185,7 @@ It cannot be changed in development builds such as `cargo run` (the menu item is
 ## How it works
 
 - Reachability is checked by running the OS `ping` command once per interval (raw ICMP sockets require administrator privileges on some OSes)
-- Notifications use [notify-rust](https://crates.io/crates/notify-rust); the menu bar / tray uses [tray-icon](https://crates.io/crates/tray-icon) + [tao](https://crates.io/crates/tao)
+- Notifications use [notify-rust](https://crates.io/crates/notify-rust); the menu bar / tray uses [tray-icon](https://crates.io/crates/tray-icon) on top of [GPUI](https://www.gpui.rs/) (the crates.io snapshot [gpui-pre](https://crates.io/crates/gpui-pre))
 - On macOS, notify-rust tries to send notifications as Finder by default, and those are silently dropped. The app therefore sets its own bundle ID (`com.novalumo.ping-notifier`) as the sender at startup (`src/notifier.rs`)
 
 ## Notes

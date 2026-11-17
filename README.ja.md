@@ -42,7 +42,7 @@ flake はソースからビルドする。`$out/Applications/Ping Notifier.app` 
 
 | OS | ファイル |
 | --- | --- |
-| macOS（Apple Silicon） | `PingNotifier-<version>-macos-arm64.zip` |
+| macOS 12 以降（Apple Silicon） | `PingNotifier-<version>-macos-arm64.zip` |
 | Windows（x64） | `PingNotifier-<version>-windows-x64.zip` |
 
 署名・公証が済んでいない版では、初回起動時に OS の警告が出る。回避手順は各リリースのノート（`.github/release-notes.md`）を参照。一度インストールすれば、以降は自動でアップデートされる。
@@ -185,7 +185,7 @@ cp -R "target/release/bundle/osx/Ping Notifier.app" /Applications/
 ## 仕組み
 
 - 疎通確認は OS 標準の `ping` コマンドを 1 回ずつ実行して行う（raw ICMP ソケットは OS によって管理者権限が必要になるため）
-- 通知は [notify-rust](https://crates.io/crates/notify-rust)、メニューバー / トレイは [tray-icon](https://crates.io/crates/tray-icon) + [tao](https://crates.io/crates/tao)
+- 通知は [notify-rust](https://crates.io/crates/notify-rust)、メニューバー / トレイは [GPUI](https://www.gpui.rs/)（crates.io 版スナップショットの [gpui-pre](https://crates.io/crates/gpui-pre)）の上で [tray-icon](https://crates.io/crates/tray-icon) を使う
 - macOS では notify-rust が既定で Finder 名義の通知を送ろうとして破棄されるため、起動時に自身の Bundle ID（`com.novalumo.ping-notifier`）を送り主に設定している（`src/notifier.rs`）
 
 ## 注意

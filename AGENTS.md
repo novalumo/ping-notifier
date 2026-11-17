@@ -10,7 +10,7 @@ ping のタイムアウト（パケットロス）を検知して OS の通知�
 
 `src/` の責務分割は以下のとおり:
 
-- `main.rs` — `tao` のイベントループと `tray-icon` のメニューバーアイコン / メニュー。監視スレッドからの `Status` を受けてアイコン色とメニュー文言を更新する
+- `main.rs` — GPUI（`gpui-pre`）のアプリと `tray-icon` のメニューバーアイコン / メニュー。監視スレッドからの `Status` を受けてアイコン色とメニュー文言を更新する
 - `worker.rs` — 監視スレッド。`ping` → `Monitor` → 通知を回し、UI からの `Command`（一時停止 / サイレントモード / 設定再読み込み）を `mpsc` で受ける。待機に `recv_timeout` を使うので指示は即座に反映される
 - `monitor.rs` — ping 結果の列から「ロス発生」「復旧」を判定する状態機械（`Monitor`）と、応答時間から「遅延」「解消」を判定する状態機械（`LatencyMonitor`）。副作用を持たない
 - `ping.rs` — OS 標準の `ping` コマンドを 1 回実行して疎通を判定し、出力から応答時間を読み取る
@@ -90,8 +90,15 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 
 ### メニューバー / トレイ
 
-- macOS ではイベントループの開始後に `TrayIcon` を作る必要があるため、`StartCause::Init` で生成している
-- Dock に表示しないため、実行時の `ActivationPolicy::Accessory`（`cargo run` 用）と `Info.plist` の `LSUIElement`（`.app` 用）の両方を設定している
+- イベントループは GPUI（Zed の UI フレームワーク）。今後 GUI（設定画面・履歴など）を増やすため、v0.10 までの `tao` から移した。crates.io の `gpui` は古いので、Zed のスナップショットを公開している `gpui-pre` / `gpui-pre-platform` を使う。部品集の `gpui-component` 0.10.0 が `gpui-pre =0.3.12` に固定で依存しているため、版は `=` で固定してそろえる（GPUI が 2 つ入らないように）
+- GPUI は `Application::run` でメインスレッドを占有する。メニュー（`MenuEvent`）・監視スレッド・更新スレッドからのイベントは `futures` のチャネルで送り、`cx.spawn` したタスクで受けて `TrayApp::handle` で処理する
+- 常駐アプリなので `QuitMode::Explicit`（ウィンドウがなくても終了しない）。終了はメニューの「終了」と、自動アップデート後の再起動のときだけ `cx.quit()` で行い、その前にトレイアイコンを破棄する（Windows でトレイにアイコンが残らないように）
+- macOS ではアプリの起動完了後に `TrayIcon` を作る必要があるため、`run` のコールバック（`applicationDidFinishLaunching` 相当）で生成している
+- Dock に表示しないため、実行時の `cx.set_activation_policy(ActivationPolicy::Accessory)`（`cargo run` 用）と `Info.plist` の `LSUIElement`（`.app` 用）の両方を設定している。GPUI は既定で `Regular` にするので、メニューバー常駐アプリでは明示が必要
+- Windows の tray-icon は隠しウィンドウのメッセージで動く。GPUI の Windows 版はスレッドの全メッセージを `GetMessageW(.., None, ..)` で配送するので、そのまま届く
+- Linux（対象外だが開発時に動かせるように）の tray-icon は GTK のメインループを必要とするため、`pump_gtk` で 50 ms ごとに GTK のイベントを処理している
+- macOS の Metal シェーダーは `gpui-pre-platform` の `runtime_shaders` で実行時にコンパイルする。ビルド時のコンパイルには Xcode の Metal ツールチェーン（Xcode 26 では別途ダウンロード）が要り、CI のランナーや Nix のビルド環境にあるとは限らないため。ウィンドウを初めて開くときに少し時間がかかる
+- GPUI は macOS 12 以降が前提のため、`osx_minimum_system_version` も 12.0 にしている
 - GUI アプリでは標準出力が見えないので、利用者に伝えるべきエラーは `report_error` で通知にも出す
 
 ### パッケージングとアイコン（cargo-bundle の癖）
@@ -163,6 +170,7 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 - `codesign --verify -R` に要件文字列を渡すときは、**別の引数として `=` 始まりで**渡す（`-R "=anchor apple generic ..."`）。`=` がないとファイルパスとして扱われ、`-R='=...'` のように連結すると構文エラーになる。`updater.rs` は前者の形
 - ワークフローの `if:` では `secrets` コンテキストを直接参照できないため、ジョブの `env` に移してから `env.X != ''` で判定している
 - Windows のコード署名はしていない（SmartScreen の警告が出る）
+- Windows のリリースビルドでは、GPUI のビルドスクリプトが HLSL シェーダーを Windows SDK の `fxc.exe` でコンパイルする（GitHub の Windows ランナーには入っている。場所は `GPUI_FXC_PATH` で指定もできる）。デバッグビルドと、Windows 以外のホストからのビルドでは行わない
 - リリースジョブは配布ファイルから `SHA256SUMS` を生成して添付する。自動アップデートの検証に使う
 - Homebrew の Cask は別リポジトリ [novalumo/homebrew-tap](https://github.com/novalumo/homebrew-tap) の `Casks/ping-notifier.rb`。リリースジョブの後に `homebrew` ジョブが `version`・`sha256`・`url` を `sed` で書き換えて push する。`url` はジョブ内に直書きしているので、配布ファイル名を変えるときはここも合わせること。Cask の書式（2 スペースのインデントで `version "..."` など 1 行）を変えると置換が効かなくなるが、`grep -qxF` で検出してジョブを失敗させる
 - tap への書き込みは GitHub App（`actions/create-github-app-token`、`client-id` と秘密鍵をシークレットに登録）のトークンで行う。個人の PAT に依存せず、権限を `homebrew-tap` の Contents に絞れるため。シークレットが未登録なら警告を出してスキップする

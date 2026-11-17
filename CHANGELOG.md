@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- macOS 12 or later is now required (previously macOS 11). The app now runs on GPUI to prepare for a settings window and other GUI features
+
 ## [0.10.0] - 2026-11-17
 
 ### Added
