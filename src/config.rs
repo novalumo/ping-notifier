@@ -10,6 +10,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, ensure};
 use serde::Deserialize;
+use toml_edit::{DocumentMut, Item, Value};
 
 use crate::i18n::{self, Lang, LanguageSetting};
 
@@ -284,7 +285,7 @@ impl Config {
         self.latency_threshold_ms.map(Duration::from_millis)
     }
 
-    fn validate(&self) -> Result<()> {
+    pub fn validate(&self) -> Result<()> {
         ensure!(!self.host.trim().is_empty(), "host must not be empty");
         ensure!(
             self.interval_secs.is_finite() && self.interval_secs > 0.0,
@@ -336,6 +337,208 @@ pub fn load_or_create(path: &Path) -> Result<Config> {
         toml::from_str(&text).with_context(|| format!("invalid format in {}", path.display()))?;
     config.validate()?;
     Ok(config)
+}
+
+/// 設定画面で編集した値を設定ファイルに書く。
+///
+/// 手書きのテンプレートのコメントや並び、利用者が書いたコメントを残すため、
+/// ファイルを `toml_edit` で読み、値が変わったキーだけを書き換える。
+/// ファイルがなければ、現在の表示言語のテンプレートを元にする
+pub fn save(path: &Path, config: &Config) -> Result<()> {
+    config.validate()?;
+    let text = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            default_config(i18n::current()).to_owned()
+        }
+        Err(e) => return Err(e).with_context(|| format!("cannot read {}", path.display())),
+    };
+    let updated = apply_to_text(&text, config)
+        .with_context(|| format!("invalid format in {}", path.display()))?;
+    if updated == text && path.exists() {
+        return Ok(());
+    }
+
+    if let Some(dir) = path.parent() {
+        fs::create_dir_all(dir).with_context(|| format!("cannot create {}", dir.display()))?;
+    }
+    // 書きかけのファイルを読まれないよう、一時ファイルに書いてから置き換える
+    let tmp = path.with_extension("toml.tmp");
+    fs::write(&tmp, &updated).with_context(|| format!("cannot write {}", tmp.display()))?;
+    fs::rename(&tmp, path).with_context(|| format!("cannot write {}", path.display()))?;
+    Ok(())
+}
+
+/// 設定ファイルの文字列に `config` の値を反映した文字列を返す
+fn apply_to_text(text: &str, config: &Config) -> Result<String> {
+    let mut doc: DocumentMut = text.parse()?;
+    set(&mut doc, "language", config.language.as_str());
+    set(&mut doc, "host", config.host.as_str());
+    set(&mut doc, "interval_secs", config.interval_secs);
+    set(&mut doc, "timeout_ms", config.timeout_ms as i64);
+    set(&mut doc, "threshold", i64::from(config.threshold));
+    set(&mut doc, "notify_recovery", config.notify_recovery);
+    set(&mut doc, "loss_sound", config.loss_sound);
+    set_optional(
+        &mut doc,
+        "latency_threshold_ms",
+        config.latency_threshold_ms.map(|ms| ms as i64),
+    );
+    set(
+        &mut doc,
+        "latency_consecutive",
+        i64::from(config.latency_consecutive),
+    );
+    set(&mut doc, "auto_update", config.auto_update);
+    Ok(doc.to_string())
+}
+
+/// 値が変わっていれば、行末のコメントなどの装飾を残したまま書き換える。キーがなければ末尾に足す
+fn set(doc: &mut DocumentMut, key: &str, value: impl Into<Value>) {
+    let mut value = value.into();
+    match doc.get_mut(key).and_then(Item::as_value_mut) {
+        Some(current) if same_value(current, &value) => {}
+        Some(current) => {
+            *value.decor_mut() = current.decor().clone();
+            *current = value;
+        }
+        None => {
+            doc.insert(key, Item::Value(value));
+        }
+    }
+}
+
+/// `1` と `1.0` のように書き方が違うだけの値は書き換えない
+fn same_value(a: &Value, b: &Value) -> bool {
+    match (a, b) {
+        (Value::String(a), Value::String(b)) => a.value() == b.value(),
+        (Value::Integer(a), Value::Integer(b)) => a.value() == b.value(),
+        (Value::Boolean(a), Value::Boolean(b)) => a.value() == b.value(),
+        (Value::Float(a), Value::Float(b)) => a.value() == b.value(),
+        (Value::Integer(a), Value::Float(b)) | (Value::Float(b), Value::Integer(a)) => {
+            *a.value() as f64 == *b.value()
+        }
+        _ => false,
+    }
+}
+
+/// 省略できるキー（`latency_threshold_ms`）を書く。
+///
+/// テンプレートでは `# latency_threshold_ms = 200` のようにコメントアウトして載せているので、
+/// 有効にするときはその行を置き換え、無効にするときはその場でコメントアウトに戻す
+fn set_optional(doc: &mut DocumentMut, key: &str, value: Option<i64>) {
+    match value {
+        Some(value) if doc.contains_key(key) => set(doc, key, value),
+        Some(value) => uncomment(doc, key, value),
+        None if doc.contains_key(key) => comment_out(doc, key),
+        None => {}
+    }
+}
+
+fn is_commented_key(line: &str, key: &str) -> bool {
+    line.trim_start()
+        .strip_prefix('#')
+        .map(str::trim_start)
+        .and_then(|rest| rest.strip_prefix(key))
+        .is_some_and(|rest| rest.trim_start().starts_with('='))
+}
+
+fn keys(doc: &DocumentMut) -> Vec<String> {
+    doc.iter().map(|(k, _)| k.to_owned()).collect()
+}
+
+fn prefix_of(doc: &DocumentMut, key: &str) -> String {
+    doc.as_table()
+        .key(key)
+        .and_then(|k| k.leaf_decor().prefix())
+        .and_then(|p| p.as_str())
+        .unwrap_or_default()
+        .to_owned()
+}
+
+fn set_prefix(doc: &mut DocumentMut, key: &str, prefix: String) {
+    if let Some(mut k) = doc.as_table_mut().key_mut(key) {
+        k.leaf_decor_mut().set_prefix(prefix);
+    }
+}
+
+fn uncomment(doc: &mut DocumentMut, key: &str, value: i64) {
+    // コメントアウトされた行は、次のキーの前置き（prefix）か、文書の末尾に入っている
+    let keys = keys(doc);
+    let found = keys.iter().find_map(|next| {
+        let prefix = prefix_of(doc, next);
+        let start = line_start_of_commented_key(&prefix, key)?;
+        Some((Some(next.clone()), prefix, start))
+    });
+    let found = found.or_else(|| {
+        let trailing = doc.trailing().as_str().unwrap_or_default().to_owned();
+        let start = line_start_of_commented_key(&trailing, key)?;
+        Some((None, trailing, start))
+    });
+
+    doc.insert(key, Item::Value(value.into()));
+    let Some((next, text, start)) = found else {
+        return;
+    };
+    // コメントアウトされた行の手前（説明のコメント）を新しいキーの前置きに、行の後ろを元の場所に残す
+    let end = text[start..]
+        .find('\n')
+        .map_or(text.len(), |i| start + i + 1);
+    let (before, after) = (text[..start].to_owned(), text[end..].to_owned());
+    set_prefix(doc, key, before);
+    match next {
+        Some(next) => {
+            set_prefix(doc, &next, after);
+            // 末尾に足されたキーを、元の行の位置（次のキーの直前）へ移す
+            let mut order: Vec<String> = keys.clone();
+            let at = order.iter().position(|k| *k == next).unwrap_or(order.len());
+            order.insert(at, key.to_owned());
+            doc.as_table_mut().sort_values_by(|a, _, b, _| {
+                let pos = |k: &str| order.iter().position(|o| o == k);
+                pos(a.get()).cmp(&pos(b.get()))
+            });
+        }
+        None => doc.set_trailing(after),
+    }
+}
+
+fn line_start_of_commented_key(text: &str, key: &str) -> Option<usize> {
+    let mut start = 0;
+    for line in text.split_inclusive('\n') {
+        if is_commented_key(line, key) {
+            return Some(start);
+        }
+        start += line.len();
+    }
+    None
+}
+
+fn comment_out(doc: &mut DocumentMut, key: &str) {
+    let keys = keys(doc);
+    let Some(value) = doc.get(key).and_then(Item::as_value).map(|v| v.to_string()) else {
+        return;
+    };
+    let line = format!(
+        "{prefix}# {key} = {}\n",
+        value.trim(),
+        prefix = prefix_of(doc, key)
+    );
+    let next = keys
+        .iter()
+        .skip_while(|k| k.as_str() != key)
+        .nth(1)
+        .cloned();
+    doc.remove(key);
+    match next {
+        Some(next) => {
+            let prefix = prefix_of(doc, &next);
+            set_prefix(doc, &next, format!("{line}{prefix}"));
+        }
+        None => {
+            let trailing = doc.trailing().as_str().unwrap_or_default().to_owned();
+            doc.set_trailing(format!("{line}{trailing}"));
+        }
+    }
 }
 
 #[cfg(test)]
@@ -397,6 +600,145 @@ mod tests {
                 Some(Duration::from_millis(200)),
                 "{lang:?}"
             );
+        }
+    }
+
+    fn with_latency(config: &Config, ms: Option<u64>) -> Config {
+        Config {
+            latency_threshold_ms: ms,
+            ..config.clone()
+        }
+    }
+
+    #[test]
+    fn saving_unchanged_values_keeps_every_template_as_is() {
+        for lang in Lang::ALL {
+            let text = default_config(lang);
+            assert_eq!(
+                apply_to_text(text, &Config::default()).unwrap(),
+                text,
+                "{lang:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn saving_changes_values_and_keeps_comments() {
+        let text = default_config(Lang::Ja);
+        let config = Config {
+            host: "192.168.1.1".into(),
+            interval_secs: 2.5,
+            timeout_ms: 800,
+            threshold: 3,
+            notify_recovery: false,
+            loss_sound: false,
+            latency_consecutive: 4,
+            auto_update: false,
+            language: LanguageSetting::En,
+            ..Config::default()
+        };
+        let saved = apply_to_text(text, &config).unwrap();
+        let parsed: Config = toml::from_str(&saved).unwrap();
+        assert_eq!(parsed.host, "192.168.1.1");
+        assert_eq!(parsed.interval_secs, 2.5);
+        assert_eq!(parsed.timeout_ms, 800);
+        assert_eq!(parsed.threshold, 3);
+        assert!(!parsed.notify_recovery);
+        assert!(!parsed.loss_sound);
+        assert_eq!(parsed.latency_consecutive, 4);
+        assert!(!parsed.auto_update);
+        assert_eq!(parsed.language, LanguageSetting::En);
+        // コメント行はすべて残る
+        let comments = |t: &str| {
+            t.lines()
+                .filter(|l| l.starts_with('#'))
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(comments(&saved), comments(text));
+        // 書き換えた行だけが変わる
+        assert!(saved.contains("host = \"192.168.1.1\"\n"));
+        assert_eq!(saved.lines().count(), text.lines().count());
+    }
+
+    #[test]
+    fn keeps_inline_comments_and_integer_style() {
+        let text = "host = \"a\" # router\ninterval_secs = 1\n";
+        let config = Config {
+            host: "b".into(),
+            ..Config::default()
+        };
+        let saved = apply_to_text(text, &config).unwrap();
+        assert!(saved.starts_with("host = \"b\" # router\ninterval_secs = 1\n"));
+    }
+
+    #[test]
+    fn latency_threshold_is_uncommented_in_place_and_commented_back() {
+        for lang in Lang::ALL {
+            let text = default_config(lang);
+            let enabled =
+                apply_to_text(text, &with_latency(&Config::default(), Some(300))).unwrap();
+            // コメントアウトされていた行が、その場で有効な行になる
+            assert_eq!(
+                enabled,
+                text.replace("# latency_threshold_ms = 200", "latency_threshold_ms = 300"),
+                "{lang:?}"
+            );
+            let parsed: Config = toml::from_str(&enabled).unwrap();
+            assert_eq!(parsed.latency_threshold_ms, Some(300));
+
+            // 無効に戻すと、その場でコメントアウトされる
+            let disabled = apply_to_text(&enabled, &Config::default()).unwrap();
+            assert_eq!(
+                disabled,
+                text.replace(
+                    "# latency_threshold_ms = 200",
+                    "# latency_threshold_ms = 300"
+                ),
+                "{lang:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn latency_threshold_is_appended_when_there_is_no_commented_line() {
+        let saved = apply_to_text(
+            "host = \"a\"\n",
+            &with_latency(&Config::default(), Some(150)),
+        )
+        .unwrap();
+        let parsed: Config = toml::from_str(&saved).unwrap();
+        assert_eq!(parsed.latency_threshold_ms, Some(150));
+    }
+
+    #[test]
+    fn save_writes_file_and_rejects_invalid_values() {
+        let dir = std::env::temp_dir().join(format!("ping-notifier-save-{}", std::process::id()));
+        let path = dir.join("config.toml");
+        let _ = fs::remove_dir_all(&dir);
+
+        // ファイルがなければテンプレートを元に作る
+        save(&path, &with_latency(&Config::default(), Some(250))).unwrap();
+        let loaded = load_or_create(&path).unwrap();
+        assert_eq!(loaded.latency_threshold_ms, Some(250));
+
+        // 不正な値は書かない
+        let before = fs::read_to_string(&path).unwrap();
+        let invalid = Config {
+            host: " ".into(),
+            ..Config::default()
+        };
+        assert!(save(&path, &invalid).is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), before);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn language_setting_round_trips() {
+        for setting in LanguageSetting::ALL {
+            let config: Config =
+                toml::from_str(&format!("language = \"{}\"", setting.as_str())).unwrap();
+            assert_eq!(config.language, setting);
         }
     }
 }

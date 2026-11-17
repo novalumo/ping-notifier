@@ -6,6 +6,7 @@ A menu bar app (system tray app on Windows and Linux) that detects ping timeouts
 
 - The icon color shows the status: green = OK / yellow = high latency / red = packet loss / gray = paused / orange = cannot run ping
 - Shows the latest response time (RTT) in the menu and the tooltip
+- "Settings…" in the menu opens a settings window. Saving there rewrites the TOML settings file and keeps its comments
 - "Silent Mode" in the menu keeps monitoring (the icon color still changes) without sending notifications
 - Optionally notifies when the response time stays above a threshold (off by default)
 - Notifications are sent only when packet loss starts and when the connection is restored (no repeated notifications during an outage)
@@ -161,10 +162,13 @@ The source is `icons/icon.svg`. After editing it, run `./icons/generate.sh` to r
 
 ## Settings
 
-A settings file is created at the following location on first launch. Edit it via "Open Settings File" in the menu, then choose "Reload Settings" to apply your changes.
+A settings file is created at the following location on first launch.
 
 - macOS: `~/Library/Application Support/ping-notifier/config.toml`
 - Windows: `%APPDATA%\ping-notifier\config.toml`
+- Linux: `~/.config/ping-notifier/config.toml`
+
+Change settings in the window opened by "Settings…" in the menu. Saving rewrites only the changed values in the file, so its comments and layout stay as they are, and the changes apply immediately. You can also edit the file directly via "Open Settings File", then choose "Reload Settings" to apply your changes.
 
 | Key | Default | Description |
 | --- | --- | --- |
