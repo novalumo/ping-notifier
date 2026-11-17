@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Linux support: tray icon, notifications, and launch at login (XDG Autostart). Releases include `PingNotifier-<version>-linux-x64.tar.gz`, which updates itself like the macOS and Windows versions. Builds made with `cargo install` only notify you of new versions
+
+### Changed
+
+- macOS 12 or later is now required (previously macOS 11). The app now runs on GPUI to prepare for a settings window and other GUI features
+
 ## [0.10.0] - 2026-11-17
 
 ### Added

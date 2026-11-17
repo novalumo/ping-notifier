@@ -2,7 +2,7 @@
 
 [English](README.md) | 日本語
 
-ping のタイムアウト（パケットロス）を検知して OS の通知に表示する、メニューバー（Windows ではタスクトレイ）常駐アプリ。
+ping のタイムアウト（パケットロス）を検知して OS の通知に表示する、メニューバー（Windows と Linux ではタスクトレイ）常駐アプリ。
 
 - アイコンの色で状態を表示: 緑 = 正常 / 黄 = 遅延 / 赤 = ロス中 / 灰 = 一時停止 / 橙 = ping を実行できない
 - 直近の応答時間（RTT）をメニューとツールチップに表示する
@@ -10,7 +10,7 @@ ping のタイムアウト（パケットロス）を検知して OS の通知�
 - 応答時間がしきい値を超える状態が続いたら通知できる（既定では無効）
 - 通知はロス状態に入ったときと復旧したときにだけ送られる（ロスが続いている間は繰り返さない）
 - 新しいバージョンが公開されると自動でアップデートする（後述）
-- メニューの「ログイン時に起動」で自動起動を切り替えられる（macOS 13 以降 / Windows）
+- メニューの「ログイン時に起動」で自動起動を切り替えられる（macOS 13 以降 / Windows / Linux）
 - 表示言語: 英語、日本語、中国語（簡体字）、韓国語、エスペラント、ドイツ語（OS の言語に合わせて切り替わり、設定で固定もできる）
 
 ## Homebrew でインストール（macOS）
@@ -42,10 +42,33 @@ flake はソースからビルドする。`$out/Applications/Ping Notifier.app` 
 
 | OS | ファイル |
 | --- | --- |
-| macOS（Apple Silicon） | `PingNotifier-<version>-macos-arm64.zip` |
+| macOS 12 以降（Apple Silicon） | `PingNotifier-<version>-macos-arm64.zip` |
 | Windows（x64） | `PingNotifier-<version>-windows-x64.zip` |
+| Linux（x64） | `PingNotifier-<version>-linux-x64.tar.gz` |
 
 署名・公証が済んでいない版では、初回起動時に OS の警告が出る。回避手順は各リリースのノート（`.github/release-notes.md`）を参照。一度インストールすれば、以降は自動でアップデートされる。
+
+## Linux でインストール
+
+[Releases](https://github.com/novalumo/ping-notifier/releases) から `PingNotifier-<version>-linux-x64.tar.gz` をダウンロードして展開し、`ping-notifier` を `~/.local/bin` など書き込める場所に置く。アプリはこのファイルを置き換えて自動でアップデートする。
+
+Debian / Ubuntu では、必要なライブラリは `libgtk-3-0` と `libayatana-appindicator3-1` にある（たいていのデスクトップには入っている）。
+
+Cargo でビルドすることもできる（新しめの安定版 Rust が必要）。この方法で入れた版はアプリ自身による置き換えを行わず、新しいバージョンが公開されると通知し、メニューからリリースページを開ける。更新は `cargo install` をもう一度実行する。
+
+```sh
+# Debian / Ubuntu
+sudo apt install build-essential pkg-config libgtk-3-dev libxdo-dev libayatana-appindicator3-dev \
+  libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libvulkan-dev \
+  libfontconfig-dev libfreetype-dev libx11-xcb-dev libxcb1-dev
+cargo install --locked --git https://github.com/novalumo/ping-notifier
+```
+
+注意:
+
+- トレイアイコンは AppIndicator（StatusNotifierItem）を使い、なければ従来のシステムトレイ（XEmbed）に表示する。GNOME では AppIndicator の拡張機能を入れる
+- 通知には通知デーモンが必要（たいていのデスクトップ環境に入っている）
+- 配布しているのは x64 版のみ
 
 ## リリース手順
 
@@ -62,7 +85,7 @@ flake はソースからビルドする。`$out/Applications/Ping Notifier.app` 
 1. リリースに添付された `SHA256SUMS` とダウンロードしたファイルのハッシュが一致すること
 2. macOS のみ: 展開した `.app` の Bundle ID が一致し、署名の検証が通ること。実行中のアプリが Developer ID で署名されている場合は、同じ Team ID の署名であることも求める
 
-メニューの「アップデートを確認」で手動でも確認できる。設定の `auto_update = false` で自動確認を止められる。置き換えに失敗した場合や開発ビルドでは、メニューからダウンロードページを開くよう案内する。
+メニューの「アップデートを確認」で手動でも確認できる。設定の `auto_update = false` で自動確認を止められる。置き換えに失敗した場合や、開発ビルド・自分でビルドした Linux 版では、メニューからダウンロードページを開くよう案内する。
 
 GitHub API に認証なしでアクセスするため、リポジトリが公開されている必要がある。
 
@@ -179,16 +202,18 @@ cp -R "target/release/bundle/osx/Ping Notifier.app" /Applications/
 
 - macOS: 「システム設定 > 一般 > ログイン項目」に Ping Notifier として登録される（`SMAppService`、macOS 13 以降）。以前ここで無効にしていた場合は許可を求められるので、開いた設定画面で有効にする
 - Windows: `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run` に登録される。exe を移動した場合は、もう一度オンにすると新しい場所で登録し直す
+- Linux: `~/.config/autostart/ping-notifier.desktop`（XDG Autostart）を作る。バイナリを移動した場合は、もう一度オンにすると新しい場所で登録し直す
 
 `cargo run` などの開発ビルドでは設定できない（メニュー項目が無効になる）。
 
 ## 仕組み
 
 - 疎通確認は OS 標準の `ping` コマンドを 1 回ずつ実行して行う（raw ICMP ソケットは OS によって管理者権限が必要になるため）
-- 通知は [notify-rust](https://crates.io/crates/notify-rust)、メニューバー / トレイは [tray-icon](https://crates.io/crates/tray-icon) + [tao](https://crates.io/crates/tao)
+- 通知は [notify-rust](https://crates.io/crates/notify-rust)、メニューバー / トレイは [GPUI](https://www.gpui.rs/)（crates.io 版スナップショットの [gpui-pre](https://crates.io/crates/gpui-pre)）の上で [tray-icon](https://crates.io/crates/tray-icon) を使う
 - macOS では notify-rust が既定で Finder 名義の通知を送ろうとして破棄されるため、起動時に自身の Bundle ID（`com.novalumo.ping-notifier`）を送り主に設定している（`src/notifier.rs`）
 
 ## 注意
 
 - macOS の `ping` はタイムアウトを秒単位（`-t`）でも制限しているため、`timeout_ms` は実質的に秒単位に切り上げられる
+- Linux 版は、仮想ディスプレイ（Xvfb）上の従来のシステムトレイ（XEmbed）と通知デーモン dunst で動作を確認した。GNOME や KDE などの実際のデスクトップ環境と Wayland では未確認
 - Windows 版はビルドとテストのみ CI で確認しており、実機での動作は未検証。通知は notify-rust の既定（PowerShell 名義）で送られる

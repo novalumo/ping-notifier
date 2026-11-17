@@ -11,13 +11,15 @@ mod ping;
 mod updater;
 mod worker;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command as Process;
+use std::sync::mpsc::Sender;
 
 use anyhow::{Context, Result};
+use futures::StreamExt;
+use futures::channel::mpsc::unbounded;
+use gpui::{ActivationPolicy, App, QuitMode};
 use semver::Version;
-use tao::event::{Event, StartCause};
-use tao::event_loop::{ControlFlow, EventLoopBuilder};
 use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{TrayIcon, TrayIconBuilder};
 
@@ -26,6 +28,7 @@ use crate::i18n::{LanguageSetting, Msg, t};
 use crate::updater::{UpdateCommand, UpdateEvent};
 use crate::worker::{Command, Status};
 
+/// メニュー・監視スレッド・更新スレッドから UI（メイン）スレッドへ届くイベント
 #[derive(Debug)]
 enum UserEvent {
     Menu(MenuEvent),
@@ -64,18 +67,11 @@ fn main() -> Result<()> {
         });
     }
 
-    #[allow(unused_mut)]
-    let mut event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
-    #[cfg(target_os = "macos")]
-    {
-        use tao::platform::macos::{ActivationPolicy, EventLoopExtMacOS};
-        // Dock に表示せずメニューバーにだけ常駐する
-        event_loop.set_activation_policy(ActivationPolicy::Accessory);
-    }
-
-    let proxy = event_loop.create_proxy();
+    // 別スレッドやメニューのコールバックから届くイベントは、GPUI のメインスレッドで順に処理する
+    let (events, mut receiver) = unbounded();
+    let sender = events.clone();
     MenuEvent::set_event_handler(Some(move |e| {
-        let _ = proxy.send_event(UserEvent::Menu(e));
+        let _ = sender.unbounded_send(UserEvent::Menu(e));
     }));
 
     let items = MenuItems::new();
@@ -89,131 +85,197 @@ fn main() -> Result<()> {
         i18n::current()
     ));
     let auto_update = config.auto_update;
-    let proxy = event_loop.create_proxy();
+    let sender = events.clone();
     let worker = worker::spawn(config, move |status| {
-        let _ = proxy.send_event(UserEvent::Status(status));
+        let _ = sender.unbounded_send(UserEvent::Status(status));
     });
-    let proxy = event_loop.create_proxy();
     let updater = updater::spawn(auto_update, move |event| {
-        let _ = proxy.send_event(UserEvent::Update(event));
+        let _ = events.unbounded_send(UserEvent::Update(event));
     });
 
-    let mut menu = Some(menu);
-    let mut tray: Option<TrayIcon> = None;
-    let mut last_status: Option<Status> = None;
-    // 自動で置き換えられなかった新バージョンとそのダウンロードページ
-    let mut available: Option<(Version, String)> = None;
+    // 常駐アプリなので、ウィンドウがなくても終了しない（終了はメニューの「終了」と再起動のときだけ）
+    gpui_platform::application()
+        .with_quit_mode(QuitMode::Explicit)
+        .run(move |cx| {
+            // Dock に表示せずメニューバーにだけ常駐する（macOS 以外では何もしない）
+            cx.set_activation_policy(ActivationPolicy::Accessory);
+            #[cfg(target_os = "linux")]
+            pump_gtk(cx);
 
-    event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Wait;
-
-        match event {
-            // macOS ではイベントループ開始後にトレイアイコンを作る必要がある
-            Event::NewEvents(StartCause::Init) => {
-                let built = TrayIconBuilder::new()
-                    .with_menu(Box::new(menu.take().expect("Init is delivered only once")))
-                    .with_tooltip("Ping Notifier")
-                    .with_icon(icon::circle(icon::GRAY))
-                    .build();
-                match built {
-                    Ok(t) => tray = Some(t),
-                    Err(e) => {
-                        report_error(Msg::TrayCreateFailedTitle, &e.into());
-                        *control_flow = ControlFlow::Exit;
-                    }
-                }
-            }
-
-            Event::UserEvent(UserEvent::Status(status)) => {
-                if last_status.as_ref() == Some(&status) {
+            // macOS ではアプリの起動が終わってからトレイアイコンを作る必要がある
+            let built = TrayIconBuilder::new()
+                .with_menu(Box::new(menu))
+                .with_tooltip("Ping Notifier")
+                .with_icon(icon::circle(icon::GRAY))
+                .build();
+            let tray = match built {
+                Ok(tray) => tray,
+                Err(e) => {
+                    report_error(Msg::TrayCreateFailedTitle, &e.into());
+                    cx.quit();
                     return;
                 }
-                let previous = last_status.as_ref().map(describe);
-                let (color, text) = describe(&status);
-                // 応答時間は毎回変わるので、変わった部分だけ反映する
-                if previous.as_ref().map(|p| &p.1) != Some(&text) {
-                    items.status.set_text(&text);
-                    if let Some(tray) = &tray {
-                        let _ = tray.set_tooltip(Some(tooltip(&text)));
-                    }
-                }
-                if previous.map(|p| p.0) != Some(color)
-                    && let Some(tray) = &tray
-                {
-                    let _ = tray.set_icon(Some(icon::circle(color)));
-                }
-                last_status = Some(status);
-            }
+            };
 
-            Event::UserEvent(UserEvent::Update(UpdateEvent::Installed { version, relaunch })) => {
+            let mut app = TrayApp {
+                items,
+                tray: Some(tray),
+                last_status: None,
+                available: None,
+                worker,
+                updater,
+                config_path,
+            };
+            cx.spawn(async move |cx| {
+                while let Some(event) = receiver.next().await {
+                    cx.update(|cx| app.handle(event, cx));
+                }
+            })
+            .detach();
+        });
+    Ok(())
+}
+
+/// tray-icon は Linux で GTK のメインループを必要とするため、GPUI のループの中で定期的に回す。
+/// 対象 OS ではないが、開発時に Linux でも動かせるようにしている
+#[cfg(target_os = "linux")]
+fn pump_gtk(cx: &mut App) {
+    if let Err(e) = gtk::init() {
+        log(&format!("failed to initialize GTK: {e}"));
+        return;
+    }
+    cx.spawn(async move |cx| {
+        loop {
+            while gtk::events_pending() {
+                gtk::main_iteration_do(false);
+            }
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(50))
+                .await;
+        }
+    })
+    .detach();
+}
+
+/// UI スレッドが持つ状態
+struct TrayApp {
+    items: MenuItems,
+    /// 終了時に先に破棄してトレイからアイコンを消す
+    tray: Option<TrayIcon>,
+    last_status: Option<Status>,
+    /// 自動で置き換えられなかった新バージョンとそのダウンロードページ
+    available: Option<(Version, String)>,
+    worker: Sender<Command>,
+    updater: Sender<UpdateCommand>,
+    config_path: PathBuf,
+}
+
+impl TrayApp {
+    fn handle(&mut self, event: UserEvent, cx: &mut App) {
+        match event {
+            UserEvent::Status(status) => self.on_status(status),
+            UserEvent::Update(UpdateEvent::Installed { version, relaunch }) => {
                 match updater::relaunch(&relaunch) {
                     Ok(()) => {
                         log(&format!("restarting into v{version}"));
-                        tray.take();
-                        *control_flow = ControlFlow::Exit;
+                        self.quit(cx);
                     }
                     // 置き換え自体は済んでいるので、次回起動時に新しいバージョンになる。
                     // macOS では自身の .app が既に消えているため、この通知は拒否されることがある
                     Err(e) => report_error(Msg::RelaunchFailedTitle, &e),
                 }
             }
-
-            Event::UserEvent(UserEvent::Update(UpdateEvent::Available { version, url })) => {
-                items
+            UserEvent::Update(UpdateEvent::Available { version, url }) => {
+                self.items
                     .update
                     .set_text(t(Msg::MenuDownloadUpdate { version: &version }));
-                available = Some((version, url));
+                self.available = Some((version, url));
             }
+            UserEvent::Menu(e) => self.on_menu(e, cx),
+        }
+    }
 
-            Event::UserEvent(UserEvent::Menu(e)) => {
-                if e.id == items.quit.id() {
-                    tray.take();
-                    *control_flow = ControlFlow::Exit;
-                } else if e.id == items.pause.id() {
-                    let _ = worker.send(Command::SetPaused(items.pause.is_checked()));
-                } else if e.id == items.silent.id() {
-                    let _ = worker.send(Command::SetSilent(items.silent.is_checked()));
-                } else if e.id == items.open.id() {
-                    if let Err(e) = open_in_editor(&config_path) {
-                        report_error(Msg::ConfigOpenFailedTitle, &e);
-                    }
-                } else if e.id == items.autostart.id() {
-                    toggle_autostart(&items.autostart);
-                } else if e.id == items.update.id() {
-                    match &available {
-                        Some((_, url)) => {
-                            if let Err(e) = open_url(url) {
-                                report_error(Msg::DownloadPageOpenFailedTitle, &e);
-                            }
-                        }
-                        None => {
-                            let _ = updater.send(UpdateCommand::CheckNow);
-                        }
-                    }
-                } else if e.id == items.reload.id() {
-                    match config::load_or_create(&config_path) {
-                        Ok(config) => {
-                            log(&format!("reloaded settings: {config:?}"));
-                            let lang = config.language.resolve();
-                            if lang != i18n::current() {
-                                i18n::set(lang);
-                                let available = available.as_ref().map(|(v, _)| v);
-                                let status = items.relabel(last_status.as_ref(), available);
-                                if let Some(tray) = &tray {
-                                    let _ = tray.set_tooltip(Some(tooltip(&status)));
-                                }
-                            }
-                            let _ = updater.send(UpdateCommand::SetAuto(config.auto_update));
-                            let _ = worker.send(Command::Reload(config));
-                        }
-                        Err(e) => report_error(Msg::ConfigLoadFailedTitle, &e),
+    fn quit(&mut self, cx: &mut App) {
+        self.tray.take();
+        cx.quit();
+    }
+
+    fn on_status(&mut self, status: Status) {
+        if self.last_status.as_ref() == Some(&status) {
+            return;
+        }
+        let previous = self.last_status.as_ref().map(describe);
+        let (color, text) = describe(&status);
+        // 応答時間は毎回変わるので、変わった部分だけ反映する
+        if previous.as_ref().map(|p| &p.1) != Some(&text) {
+            self.items.status.set_text(&text);
+            if let Some(tray) = &self.tray {
+                let _ = tray.set_tooltip(Some(tooltip(&text)));
+            }
+        }
+        if previous.map(|p| p.0) != Some(color)
+            && let Some(tray) = &self.tray
+        {
+            let _ = tray.set_icon(Some(icon::circle(color)));
+        }
+        self.last_status = Some(status);
+    }
+
+    fn on_menu(&mut self, e: MenuEvent, cx: &mut App) {
+        let items = &self.items;
+        if e.id == items.quit.id() {
+            self.quit(cx);
+        } else if e.id == items.pause.id() {
+            let _ = self
+                .worker
+                .send(Command::SetPaused(items.pause.is_checked()));
+        } else if e.id == items.silent.id() {
+            let _ = self
+                .worker
+                .send(Command::SetSilent(items.silent.is_checked()));
+        } else if e.id == items.open.id() {
+            if let Err(e) = open_in_editor(&self.config_path) {
+                report_error(Msg::ConfigOpenFailedTitle, &e);
+            }
+        } else if e.id == items.autostart.id() {
+            toggle_autostart(&items.autostart);
+        } else if e.id == items.update.id() {
+            match &self.available {
+                Some((_, url)) => {
+                    if let Err(e) = open_url(url) {
+                        report_error(Msg::DownloadPageOpenFailedTitle, &e);
                     }
                 }
+                None => {
+                    let _ = self.updater.send(UpdateCommand::CheckNow);
+                }
             }
-
-            _ => {}
+        } else if e.id == items.reload.id() {
+            self.reload_config();
         }
-    })
+    }
+
+    fn reload_config(&mut self) {
+        match config::load_or_create(&self.config_path) {
+            Ok(config) => {
+                log(&format!("reloaded settings: {config:?}"));
+                let lang = config.language.resolve();
+                if lang != i18n::current() {
+                    i18n::set(lang);
+                    let available = self.available.as_ref().map(|(v, _)| v);
+                    let status = self.items.relabel(self.last_status.as_ref(), available);
+                    if let Some(tray) = &self.tray {
+                        let _ = tray.set_tooltip(Some(tooltip(&status)));
+                    }
+                }
+                let _ = self
+                    .updater
+                    .send(UpdateCommand::SetAuto(config.auto_update));
+                let _ = self.worker.send(Command::Reload(config));
+            }
+            Err(e) => report_error(Msg::ConfigLoadFailedTitle, &e),
+        }
+    }
 }
 
 /// メニュー項目。表示言語が変わったときに文言を付け直せるようまとめて持つ

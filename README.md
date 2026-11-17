@@ -2,7 +2,7 @@
 
 English | [日本語](README.ja.md)
 
-A menu bar app (system tray app on Windows) that detects ping timeouts (packet loss) and shows them as OS notifications.
+A menu bar app (system tray app on Windows and Linux) that detects ping timeouts (packet loss) and shows them as OS notifications.
 
 - The icon color shows the status: green = OK / yellow = high latency / red = packet loss / gray = paused / orange = cannot run ping
 - Shows the latest response time (RTT) in the menu and the tooltip
@@ -10,7 +10,7 @@ A menu bar app (system tray app on Windows) that detects ping timeouts (packet l
 - Optionally notifies when the response time stays above a threshold (off by default)
 - Notifications are sent only when packet loss starts and when the connection is restored (no repeated notifications during an outage)
 - Updates itself automatically when a new version is released (see below)
-- "Launch at Login" can be toggled from the menu (macOS 13 or later / Windows)
+- "Launch at Login" can be toggled from the menu (macOS 13 or later / Windows / Linux)
 - Display languages: English, Japanese, Chinese (Simplified), Korean, Esperanto, German (follows the OS language; can also be set explicitly)
 
 ## Install with Homebrew (macOS)
@@ -42,10 +42,33 @@ Download the file for your OS from [Releases](https://github.com/novalumo/ping-n
 
 | OS | File |
 | --- | --- |
-| macOS (Apple Silicon) | `PingNotifier-<version>-macos-arm64.zip` |
+| macOS 12 or later (Apple Silicon) | `PingNotifier-<version>-macos-arm64.zip` |
 | Windows (x64) | `PingNotifier-<version>-windows-x64.zip` |
+| Linux (x64) | `PingNotifier-<version>-linux-x64.tar.gz` |
 
 Versions that are not signed and notarized show an OS warning on first launch. See the release notes (`.github/release-notes.md`) for how to proceed. Once installed, the app keeps itself up to date.
+
+## Install on Linux
+
+Download `PingNotifier-<version>-linux-x64.tar.gz` from [Releases](https://github.com/novalumo/ping-notifier/releases), extract it, and put `ping-notifier` in a directory you can write to, such as `~/.local/bin`. The app updates itself by replacing that file.
+
+On Debian / Ubuntu, the libraries it needs are in `libgtk-3-0` and `libayatana-appindicator3-1`, which most desktops already have.
+
+You can also build it with Cargo (a recent stable Rust is required). Builds made this way do not replace themselves: when a new version is released, the app notifies you and the menu opens the release page. Run the `cargo install` command again to update.
+
+```sh
+# Debian / Ubuntu
+sudo apt install build-essential pkg-config libgtk-3-dev libxdo-dev libayatana-appindicator3-dev \
+  libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libvulkan-dev \
+  libfontconfig-dev libfreetype-dev libx11-xcb-dev libxcb1-dev
+cargo install --locked --git https://github.com/novalumo/ping-notifier
+```
+
+Notes:
+
+- The tray icon uses AppIndicator (StatusNotifierItem) and falls back to the legacy system tray (XEmbed). On GNOME, install the AppIndicator extension
+- Notifications need a notification daemon, which most desktop environments have
+- Only x64 builds are distributed
 
 ## Release process
 
@@ -62,7 +85,7 @@ The app checks the latest version on [Releases](https://github.com/novalumo/ping
 1. The hash of the downloaded file matches `SHA256SUMS` attached to the release
 2. macOS only: the bundle ID of the extracted `.app` matches and its code signature is valid. If the running app is signed with a Developer ID, the new version must be signed by the same Team ID
 
-You can also check manually with "Check for Updates" in the menu. Set `auto_update = false` to turn off automatic checks. If replacing the app fails, or when running a development build, the menu offers to open the download page instead.
+You can also check manually with "Check for Updates" in the menu. Set `auto_update = false` to turn off automatic checks. If replacing the app fails, or when running a development build or a Linux build you made yourself, the menu offers to open the download page instead.
 
 The GitHub API is accessed without authentication, so the repository must be public.
 
@@ -179,16 +202,18 @@ Toggle "Launch at Login" in the menu. The checkmark reflects the registration on
 
 - macOS: registered as Ping Notifier in System Settings > General > Login Items (`SMAppService`, macOS 13 or later). If you previously turned it off there, you will be asked for approval; enable it in the settings window that opens
 - Windows: registered under `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`. If you move the exe, turn the option on again to register the new location
+- Linux: adds `~/.config/autostart/ping-notifier.desktop` (XDG Autostart). If you move the binary, turn the option on again to register the new location
 
 It cannot be changed in development builds such as `cargo run` (the menu item is disabled).
 
 ## How it works
 
 - Reachability is checked by running the OS `ping` command once per interval (raw ICMP sockets require administrator privileges on some OSes)
-- Notifications use [notify-rust](https://crates.io/crates/notify-rust); the menu bar / tray uses [tray-icon](https://crates.io/crates/tray-icon) + [tao](https://crates.io/crates/tao)
+- Notifications use [notify-rust](https://crates.io/crates/notify-rust); the menu bar / tray uses [tray-icon](https://crates.io/crates/tray-icon) on top of [GPUI](https://www.gpui.rs/) (the crates.io snapshot [gpui-pre](https://crates.io/crates/gpui-pre))
 - On macOS, notify-rust tries to send notifications as Finder by default, and those are silently dropped. The app therefore sets its own bundle ID (`com.novalumo.ping-notifier`) as the sender at startup (`src/notifier.rs`)
 
 ## Notes
 
 - macOS `ping` also limits the overall timeout in whole seconds (`-t`), so `timeout_ms` is effectively rounded up to seconds
+- The Linux version has been checked on a virtual X11 display (Xvfb) with a legacy (XEmbed) system tray and the dunst notification daemon, but not yet on a real desktop such as GNOME or KDE, or on Wayland
 - The Windows version is only built and tested in CI and has not been verified on a real machine. Notifications are sent with notify-rust's default identity (PowerShell)

@@ -7,19 +7,32 @@ edition = "2024"
 anyhow = "1.0.104"
 chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 dirs = "7.0.0"
+futures = "0.3"
+# GPUI（Zed の UI フレームワーク）の crates.io 版スナップショット。
+# gpui-component 0.10.0 が gpui-pre =0.3.12 に固定で依存しているため、版をそろえておく
+gpui = { package = "gpui-pre", version = "=0.3.12" }
+# macOS の Metal シェーダーはビルド時ではなく実行時にコンパイルする。ビルド時のコンパイルには
+# Xcode の Metal ツールチェーンが要り、CI のランナーや Nix のビルド環境にあるとは限らないため
+gpui_platform = { package = "gpui-pre-platform", version = "=0.3.12", features = ["runtime_shaders"] }
 notify-rust = "4.18.2"
 semver = "1.0.28"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 sha2 = "0.11.0"
 sys-locale = "0.3.2"
-tao = "0.37.1"
 toml = "1.1.7"
 tray-icon = "0.26.1"
 ureq = { version = "3.4.2", features = ["json"] }
 
 [build-dependencies]
 winresource = "0.1.31"
+
+# tray-icon は Linux で GTK のメインループを必要とする（GPUI のループの中で回す）
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+# 自動アップデートで配布物（tar.gz）を展開する
+flate2 = "1"
+tar = { version = "0.4", default-features = false }
 
 [target."cfg(windows)".dependencies]
 windows-registry = "0.100.0"
@@ -34,7 +47,7 @@ name = "Ping Notifier"
 # src/notifier.rs の BUNDLE_ID と一致させること
 identifier = "com.novalumo.ping-notifier"
 short_description = "ping のタイムアウトを検知して通知するメニューバー常駐アプリ"
-osx_minimum_system_version = "11.0"
+osx_minimum_system_version = "12.0"
 osx_info_plist_exts = ["macos/Info.plist.ext"]
 # icons/generate.sh で icons/icon.svg から生成する
 icon = [

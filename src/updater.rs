@@ -32,7 +32,13 @@ const MAX_DOWNLOAD_BYTES: u64 = 100 * 1024 * 1024;
 const ASSET_SUFFIX: &str = "-macos-arm64.zip";
 #[cfg(target_os = "windows")]
 const ASSET_SUFFIX: &str = "-windows-x64.zip";
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+const ASSET_SUFFIX: &str = "-linux-x64.tar.gz";
+#[cfg(not(any(
+    target_os = "macos",
+    target_os = "windows",
+    all(target_os = "linux", target_arch = "x86_64")
+)))]
 const ASSET_SUFFIX: &str = "";
 
 /// UI スレッドから更新スレッドへの指示
@@ -515,7 +521,137 @@ mod platform {
     }
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(target_os = "linux")]
+mod platform {
+    use std::fs::{self, File, Permissions};
+    use std::io;
+    use std::os::unix::fs::PermissionsExt;
+    use std::os::unix::process::CommandExt;
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
+
+    use anyhow::{Context, Result, bail};
+    use semver::Version;
+
+    use super::{ASSET_SUFFIX, UPDATED_FROM_ARG};
+
+    const EXE_NAME: &str = "ping-notifier";
+
+    /// 新しい版を展開する一時ファイル。rename で入れ替えるため、実行ファイルと同じディレクトリに置く
+    fn staging_path(exe: &Path) -> PathBuf {
+        exe.with_file_name(".ping-notifier-update")
+    }
+
+    pub fn can_self_update() -> bool {
+        // 置き換えるのは公式の配布物だけ。リリースのワークフローがビルド時に
+        // PING_NOTIFIER_OFFICIAL_BUILD を設定する。cargo install やディストリビューションの
+        // パッケージで入れた版は、それぞれの方法で更新してもらう（新版の通知と案内は出す）
+        !cfg!(debug_assertions)
+            && option_env!("PING_NOTIFIER_OFFICIAL_BUILD").is_some()
+            && !ASSET_SUFFIX.is_empty()
+    }
+
+    pub fn cleanup_previous() {
+        if let Ok(exe) = std::env::current_exe() {
+            let _ = fs::remove_file(staging_path(&exe));
+        }
+    }
+
+    pub fn install(archive: &[u8]) -> Result<PathBuf> {
+        let exe = std::env::current_exe().context("cannot determine the executable path")?;
+        let staging = staging_path(&exe);
+        if let Err(e) = extract_executable(archive, &staging) {
+            let _ = fs::remove_file(&staging);
+            return Err(e);
+        }
+        // Linux では実行中のファイルも rename で置き換えられる（動いているプロセスは古い中身を使い続ける）
+        if let Err(e) = fs::rename(&staging, &exe) {
+            let _ = fs::remove_file(&staging);
+            return Err(e).with_context(|| format!("cannot replace {}", exe.display()));
+        }
+        Ok(exe)
+    }
+
+    /// 配布物（tar.gz）から実行ファイルだけを取り出し、実行権限を付けて `dest` に書く。
+    /// アーカイブ内のパスは書き込み先に使わない（`../` などで想定外の場所に書かないように）
+    pub(super) fn extract_executable(archive: &[u8], dest: &Path) -> Result<()> {
+        let mut tar = tar::Archive::new(flate2::read::GzDecoder::new(archive));
+        for entry in tar
+            .entries()
+            .context("cannot open the downloaded archive")?
+        {
+            let mut entry = entry.context("cannot read the downloaded archive")?;
+            let is_exe = entry.header().entry_type().is_file()
+                && entry
+                    .path()
+                    .is_ok_and(|p| p.file_name() == Some(EXE_NAME.as_ref()));
+            if !is_exe {
+                continue;
+            }
+            let mut file = File::create(dest)
+                .with_context(|| format!("cannot write to {}", dest.display()))?;
+            io::copy(&mut entry, &mut file).context("cannot write the new executable")?;
+            fs::set_permissions(dest, Permissions::from_mode(0o755))
+                .context("cannot make the new executable runnable")?;
+            return Ok(());
+        }
+        bail!("the downloaded archive contains no {EXE_NAME}")
+    }
+
+    pub fn relaunch(exe: &Path, from: &Version) -> Result<()> {
+        Command::new(exe)
+            .arg(UPDATED_FROM_ARG)
+            .arg(from.to_string())
+            // 端末から起動していた場合も、端末と一緒に終了しないよう別のプロセスグループにする
+            .process_group(0)
+            .spawn()
+            .context("cannot launch the new version")?;
+        Ok(())
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use std::fs;
+
+        use super::*;
+
+        fn tar_gz(files: &[(&str, &[u8])]) -> Vec<u8> {
+            let gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+            let mut builder = tar::Builder::new(gz);
+            for (path, data) in files {
+                let mut header = tar::Header::new_gnu();
+                header.set_size(data.len() as u64);
+                header.set_mode(0o644);
+                header.set_cksum();
+                builder.append_data(&mut header, path, *data).unwrap();
+            }
+            builder.into_inner().unwrap().finish().unwrap()
+        }
+
+        #[test]
+        fn extracts_only_the_executable() {
+            let dir =
+                std::env::temp_dir().join(format!("ping-notifier-test-{}", std::process::id()));
+            fs::create_dir_all(&dir).unwrap();
+            let dest = dir.join("new");
+
+            let archive = tar_gz(&[("README.md", b"readme"), ("ping-notifier", b"binary")]);
+            extract_executable(&archive, &dest).unwrap();
+            assert_eq!(fs::read(&dest).unwrap(), b"binary");
+            // 実行権限が付く
+            assert_eq!(
+                fs::metadata(&dest).unwrap().permissions().mode() & 0o777,
+                0o755
+            );
+
+            let archive = tar_gz(&[("README.md", b"readme")]);
+            assert!(extract_executable(&archive, &dest).is_err());
+            fs::remove_dir_all(&dir).unwrap();
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 mod platform {
     use std::path::{Path, PathBuf};
 
@@ -576,6 +712,7 @@ mod tests {
         let sums = "\
 aaa111  PingNotifier-0.2.0-macos-arm64.zip
 bbb222 *PingNotifier-0.2.0-windows-x64.zip
+ccc333  PingNotifier-0.2.0-linux-x64.tar.gz
 ";
         assert_eq!(
             expected_hash(sums, "PingNotifier-0.2.0-macos-arm64.zip"),
@@ -584,6 +721,10 @@ bbb222 *PingNotifier-0.2.0-windows-x64.zip
         assert_eq!(
             expected_hash(sums, "PingNotifier-0.2.0-windows-x64.zip"),
             Some("bbb222")
+        );
+        assert_eq!(
+            expected_hash(sums, "PingNotifier-0.2.0-linux-x64.tar.gz"),
+            Some("ccc333")
         );
         assert_eq!(expected_hash(sums, "PingNotifier-0.2.0"), None);
     }
@@ -596,12 +737,16 @@ bbb222 *PingNotifier-0.2.0-windows-x64.zip
         );
     }
 
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "windows",
+        all(target_os = "linux", target_arch = "x86_64")
+    ))]
     #[test]
     fn selects_only_this_platforms_asset() {
         let name = format!("PingNotifier-0.2.0{ASSET_SUFFIX}");
         assert!(is_platform_asset(&name));
         assert!(!is_platform_asset(SUMS_ASSET));
-        assert!(!is_platform_asset("PingNotifier-0.2.0-linux-x64.zip"));
+        assert!(!is_platform_asset("PingNotifier-0.2.0-other-os.zip"));
     }
 }

@@ -1,6 +1,6 @@
 name: Release
 
-# v* タグの push で macOS / Windows 向けにビルドし、GitHub Release を作成する。
+# v* タグの push で macOS / Windows / Linux 向けにビルドし、GitHub Release を作成する。
 # 手動実行（workflow_dispatch）ではビルドと成果物のアップロードだけを行い、Release は作らない。
 on:
   push:
@@ -149,10 +149,48 @@ jobs:
           path: ${{ env.ARCHIVE }}
           if-no-files-found: error
 
+  linux:
+    name: Build Linux (x64)
+    needs: version
+    # 古めの glibc でビルドし、多くのディストリビューションで動くようにする
+    runs-on: ubuntu-22.04
+    env:
+      ARCHIVE: PingNotifier-${{ needs.version.outputs.version }}-linux-x64.tar.gz
+      # 公式の配布物の印。これを付けてビルドした版だけが、アプリ自身で自動アップデートする
+      # （cargo install などでビルドした版は置き換えず、新版の案内だけにする）
+      PING_NOTIFIER_OFFICIAL_BUILD: "1"
+    steps:
+      - uses: actions/checkout@v7
+
+      # tray-icon（GTK・AppIndicator）と GPUI（X11・Wayland）が使うライブラリ。ci.yml と同じ一覧
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libxdo-dev libayatana-appindicator3-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libvulkan-dev \
+            libfontconfig-dev libfreetype-dev libx11-xcb-dev libxcb1-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --release --locked
+
+      # 自動アップデートは、アーカイブ内の ping-notifier だけを取り出す
+      - name: Archive
+        run: tar -czf "$ARCHIVE" -C target/release ping-notifier
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linux
+          path: ${{ env.ARCHIVE }}
+          if-no-files-found: error
+
   release:
     name: Publish GitHub Release
     if: github.ref_type == 'tag'
-    needs: [macos, windows]
+    needs: [macos, windows, linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write

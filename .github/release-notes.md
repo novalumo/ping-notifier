@@ -4,6 +4,7 @@
 | --- | --- |
 | macOS (Apple Silicon) | `PingNotifier-*-macos-arm64.zip` |
 | Windows (x64) | `PingNotifier-*-windows-x64.zip` |
+| Linux (x64) | `PingNotifier-*-linux-x64.tar.gz` |
 
 ## Install
 
@@ -25,13 +26,19 @@ Step 2 is not needed for versions notarized by Apple.
 1. Unzip the file, put `ping-notifier.exe` anywhere you like, and run it
 2. If "Windows protected your PC" appears, click "More info" → "Run anyway"
 
+### Linux
+
+1. Extract the file and put `ping-notifier` in a directory you can write to, such as `~/.local/bin` (automatic updates replace the file in place)
+2. Run it. The tray icon needs AppIndicator support (on GNOME, the AppIndicator extension) or a legacy system tray
+   - On Debian / Ubuntu, the required libraries are in `libgtk-3-0` and `libayatana-appindicator3-1`, which most desktops already have
+
 ## Updates
 
 Once installed, new versions are installed automatically. You can also check manually with "Check for Updates" in the menu.
 
 ## Settings
 
-Open the settings file via "Open Settings File" from the menu bar (system tray on Windows) icon, then choose "Reload Settings" to apply your changes.
+Open the settings file via "Open Settings File" from the menu bar (system tray on Windows and Linux) icon, then choose "Reload Settings" to apply your changes.
 
 <details>
 <summary>日本語</summary>
@@ -42,6 +49,7 @@ Open the settings file via "Open Settings File" from the menu bar (system tray o
 | --- | --- |
 | macOS（Apple Silicon） | `PingNotifier-*-macos-arm64.zip` |
 | Windows（x64） | `PingNotifier-*-windows-x64.zip` |
+| Linux（x64） | `PingNotifier-*-linux-x64.tar.gz` |
 
 ## インストール
 
@@ -63,12 +71,18 @@ Apple の公証（notarization）を受けた版では手順 2 は不要。
 1. zip を展開し、`ping-notifier.exe` を任意の場所に置いて実行する
 2. 「Windows によって PC が保護されました」と表示されたら「詳細情報」→「実行」を押す
 
+### Linux
+
+1. 展開した `ping-notifier` を、`~/.local/bin` など書き込める場所に置く（自動アップデートはこのファイルをその場で置き換える）
+2. 実行する。トレイアイコンの表示には AppIndicator（GNOME では AppIndicator の拡張機能）か従来のシステムトレイが必要
+   - Debian / Ubuntu では、必要なライブラリは `libgtk-3-0` と `libayatana-appindicator3-1` にある（たいていのデスクトップには入っている）
+
 ## アップデート
 
 一度インストールすれば、新しいバージョンは自動でインストールされる（メニューの「アップデートを確認」で手動確認も可能）。
 
 ## 設定
 
-メニューバー（Windows ではタスクトレイ）のアイコンから「設定ファイルを開く」で編集し、「設定を再読み込み」で反映する。
+メニューバー（Windows と Linux ではタスクトレイ）のアイコンから「設定ファイルを開く」で編集し、「設定を再読み込み」で反映する。
 
 </details>
