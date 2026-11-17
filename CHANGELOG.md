@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Linux support (build from source with `cargo install`): tray icon, notifications, and launch at login (XDG Autostart). There are no prebuilt Linux binaries, and the app does not update itself on Linux
+
 ### Changed
 
 - macOS 12 or later is now required (previously macOS 11). The app now runs on GPUI to prepare for a settings window and other GUI features

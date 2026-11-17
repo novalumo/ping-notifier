@@ -2,7 +2,7 @@
 
 [English](README.md) | 日本語
 
-ping のタイムアウト（パケットロス）を検知して OS の通知に表示する、メニューバー（Windows ではタスクトレイ）常駐アプリ。
+ping のタイムアウト（パケットロス）を検知して OS の通知に表示する、メニューバー（Windows と Linux ではタスクトレイ）常駐アプリ。
 
 - アイコンの色で状態を表示: 緑 = 正常 / 黄 = 遅延 / 赤 = ロス中 / 灰 = 一時停止 / 橙 = ping を実行できない
 - 直近の応答時間（RTT）をメニューとツールチップに表示する
@@ -10,7 +10,7 @@ ping のタイムアウト（パケットロス）を検知して OS の通知�
 - 応答時間がしきい値を超える状態が続いたら通知できる（既定では無効）
 - 通知はロス状態に入ったときと復旧したときにだけ送られる（ロスが続いている間は繰り返さない）
 - 新しいバージョンが公開されると自動でアップデートする（後述）
-- メニューの「ログイン時に起動」で自動起動を切り替えられる（macOS 13 以降 / Windows）
+- メニューの「ログイン時に起動」で自動起動を切り替えられる（macOS 13 以降 / Windows / Linux）
 - 表示言語: 英語、日本語、中国語（簡体字）、韓国語、エスペラント、ドイツ語（OS の言語に合わせて切り替わり、設定で固定もできる）
 
 ## Homebrew でインストール（macOS）
@@ -46,6 +46,24 @@ flake はソースからビルドする。`$out/Applications/Ping Notifier.app` 
 | Windows（x64） | `PingNotifier-<version>-windows-x64.zip` |
 
 署名・公証が済んでいない版では、初回起動時に OS の警告が出る。回避手順は各リリースのノート（`.github/release-notes.md`）を参照。一度インストールすれば、以降は自動でアップデートされる。
+
+## Linux でインストール（ソースからビルド）
+
+Linux 向けのビルド済みファイルはまだない。Cargo でビルドする（新しめの安定版 Rust が必要）。
+
+```sh
+# Debian / Ubuntu
+sudo apt install build-essential pkg-config libgtk-3-dev libxdo-dev libayatana-appindicator3-dev \
+  libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libvulkan-dev \
+  libfontconfig-dev libfreetype-dev libx11-xcb-dev libxcb1-dev
+cargo install --locked --git https://github.com/novalumo/ping-notifier
+```
+
+注意:
+
+- トレイアイコンは AppIndicator（StatusNotifierItem）を使い、なければ従来のシステムトレイ（XEmbed）に表示する。GNOME では AppIndicator の拡張機能を入れる
+- 通知には通知デーモンが必要（たいていのデスクトップ環境に入っている）
+- アプリ自身による置き換えは行わない。新しいバージョンが公開されると通知し、メニューからリリースページを開ける。更新は `cargo install` をもう一度実行する
 
 ## リリース手順
 
@@ -179,6 +197,7 @@ cp -R "target/release/bundle/osx/Ping Notifier.app" /Applications/
 
 - macOS: 「システム設定 > 一般 > ログイン項目」に Ping Notifier として登録される（`SMAppService`、macOS 13 以降）。以前ここで無効にしていた場合は許可を求められるので、開いた設定画面で有効にする
 - Windows: `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run` に登録される。exe を移動した場合は、もう一度オンにすると新しい場所で登録し直す
+- Linux: `~/.config/autostart/ping-notifier.desktop`（XDG Autostart）を作る。バイナリを移動した場合は、もう一度オンにすると新しい場所で登録し直す
 
 `cargo run` などの開発ビルドでは設定できない（メニュー項目が無効になる）。
 
@@ -191,4 +210,5 @@ cp -R "target/release/bundle/osx/Ping Notifier.app" /Applications/
 ## 注意
 
 - macOS の `ping` はタイムアウトを秒単位（`-t`）でも制限しているため、`timeout_ms` は実質的に秒単位に切り上げられる
+- Linux 版は、仮想ディスプレイ（Xvfb）上の従来のシステムトレイ（XEmbed）と通知デーモン dunst で動作を確認した。GNOME や KDE などの実際のデスクトップ環境と Wayland では未確認
 - Windows 版はビルドとテストのみ CI で確認しており、実機での動作は未検証。通知は notify-rust の既定（PowerShell 名義）で送られる

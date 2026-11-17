@@ -4,7 +4,7 @@
 
 ## プロジェクト概要
 
-ping のタイムアウト（パケットロス）を検知して OS の通知に表示する、Rust 製のメニューバー（Windows ではタスクトレイ）常駐アプリ。対象 OS は macOS と Windows。設定は TOML ファイルで、GUI の設定画面は持たない。
+ping のタイムアウト（パケットロス）を検知して OS の通知に表示する、Rust 製のメニューバー（Windows と Linux ではタスクトレイ）常駐アプリ。対象 OS は macOS・Windows・Linux（Linux はソースからのビルドのみで、配布物と自動アップデートはない）。設定は TOML ファイルで、GUI の設定画面は持たない。
 
 ## アーキテクチャ
 
@@ -16,7 +16,7 @@ ping のタイムアウト（パケットロス）を検知して OS の通知�
 - `ping.rs` — OS 標準の `ping` コマンドを 1 回実行して疎通を判定し、出力から応答時間を読み取る
 - `notifier.rs` — `notify-rust` による通知送信と、macOS での送り主（Bundle ID）設定
 - `updater.rs` — GitHub Releases からの自動アップデート（更新スレッド、検証、OS ごとの置き換えと再起動）
-- `autostart.rs` — ログイン時の自動起動の登録 / 解除（macOS: `SMAppService`、Windows: レジストリの Run キー）
+- `autostart.rs` — ログイン時の自動起動の登録 / 解除（macOS: `SMAppService`、Windows: レジストリの Run キー、Linux: XDG Autostart）
 - `i18n.rs` — 表示言語の決定と、利用者に見せる文言（`Msg`）の各言語の訳
 - `config.rs` — 設定ファイルの読み込み・初回生成・検証
 - `icon.rs` — 状態アイコン（色付きの円）を実行時に RGBA で描画する
@@ -96,7 +96,7 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 - macOS ではアプリの起動完了後に `TrayIcon` を作る必要があるため、`run` のコールバック（`applicationDidFinishLaunching` 相当）で生成している
 - Dock に表示しないため、実行時の `cx.set_activation_policy(ActivationPolicy::Accessory)`（`cargo run` 用）と `Info.plist` の `LSUIElement`（`.app` 用）の両方を設定している。GPUI は既定で `Regular` にするので、メニューバー常駐アプリでは明示が必要
 - Windows の tray-icon は隠しウィンドウのメッセージで動く。GPUI の Windows 版はスレッドの全メッセージを `GetMessageW(.., None, ..)` で配送するので、そのまま届く
-- Linux（対象外だが開発時に動かせるように）の tray-icon は GTK のメインループを必要とするため、`pump_gtk` で 50 ms ごとに GTK のイベントを処理している
+- Linux の tray-icon は GTK のメインループを必要とするため、`pump_gtk` で 50 ms ごとに GTK のイベントを処理している（GPUI は GTK のループを回さない）。トレイは libayatana-appindicator の StatusNotifierItem で、それを受ける側がなければ従来の XEmbed のトレイに出る
 - macOS の Metal シェーダーは `gpui-pre-platform` の `runtime_shaders` で実行時にコンパイルする。ビルド時のコンパイルには Xcode の Metal ツールチェーン（Xcode 26 では別途ダウンロード）が要り、CI のランナーや Nix のビルド環境にあるとは限らないため。ウィンドウを初めて開くときに少し時間がかかる
 - GPUI は macOS 12 以降が前提のため、`osx_minimum_system_version` も 12.0 にしている
 - GUI アプリでは標準出力が見えないので、利用者に伝えるべきエラーは `report_error` で通知にも出す
@@ -142,6 +142,7 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 - 自動アップデートは .app を同じパスで置き換えるので、登録は引き継がれる想定（Bundle ID と Team ID が変わらないため）
 - macOS のログイン項目（BTM）は、登録された .app が元の場所からなくなると、LaunchServices が知っている**同じ Bundle ID の別のコピー**に登録先を付け替えることがある。v0.5.0 への入れ替え時、`/Applications` の .app をゴミ箱に移した直後に登録先が `/nix/store/...`（`nix run` で起動した Nix 版）に変わり、新しい .app を `/Applications` に置いて起動すると戻ったのを `sfltool dumpbtm` で確認した。Homebrew 版・ダウンロード版と Nix 版を同時に入れると、ログイン時に意図しない方が起動しうる（README で同時インストールを避けるよう案内している理由）
 - 同じ Bundle ID の `.app` を別の場所（作業用ディレクトリのテスト用ビルドなど）から起動すると、`/Applications` に .app があってもログイン項目の登録先がそのコピーに付け替わることがある（自動アップデートの検証中に確認）。検証後は `lsregister -u <テスト用の .app>` で登録を外して削除し、`/Applications` の .app を起動し直して `sfltool dumpbtm` で登録先を確かめること
+- Linux は `dirs::config_dir()/autostart/ping-notifier.desktop`（XDG Autostart）を書く。`Exec=` は Desktop Entry 仕様どおりパスを引用符で囲み、`"` `` ` `` `$` `\` をエスケープし、`%` を `%%` にする。`Exec=` が現在のバイナリと一致し、`Hidden=true` や `X-GNOME-Autostart-enabled=false`（デスクトップ環境の設定で無効にした印）がなければ有効とみなす。Windows と同じくリリースビルドに限る
 - Windows は `HKCU\...\Run` に引用符付きの exe パスを登録する。登録値が現在の exe パスと一致しなければ無効とみなす。タスクマネージャーの「スタートアップ アプリ」で無効化された状態（`StartupApproved`）までは見ていないため、その場合はメニュー上オンのままになる
 
 ### 多言語対応（i18n）
@@ -158,9 +159,10 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 
 | ワークフロー | 契機 | 内容 |
 | --- | --- | --- |
-| `.github/workflows/ci.yml` | main への push、PR | macOS / Windows で `fmt --check`・`clippy -D warnings`・`test` |
+| `.github/workflows/ci.yml` | main への push、PR | macOS / Windows / Linux（Ubuntu）で `fmt --check`・`clippy -D warnings`・`test` |
 | `.github/workflows/release.yml` | `v*` タグの push、手動実行 | macOS（Apple Silicon）の `.app` と Windows x64 `.exe` を zip 化。タグ時のみ GitHub Release を作成し、Homebrew の Cask を更新 |
 
+- Linux の CI では、tray-icon（GTK・AppIndicator・libxdo）と GPUI（X11・Wayland・Vulkan・fontconfig）の開発用パッケージを apt で入れている。README の Linux のビルド手順と同じ一覧
 - CI は Nix を使わず `dtolnay/rust-toolchain@stable` を使う（Windows ランナーで Nix が使えないため）。`cargo-bundle` は `cargo install` で入れる
 - macOS は Apple Silicon（`aarch64-apple-darwin`）のみ。Intel Mac は今後廃止されるため対応しない（v0.4.0 までは `lipo` で結合した universal を `-macos-universal.zip` として配布していた）。`cargo bundle` は `--locked` を受け付けないので、先に `cargo build --locked` しておく
 - リリースはタグと `Cargo.toml` の `version` の一致を検証する。バージョンを上げるときは `Cargo.toml` を更新してからタグを打つ
@@ -186,6 +188,7 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 | `src/config.rs::tests` | 全言語の初期テンプレートと `Config::default()` の一致、テンプレートのコメントを外した `latency_threshold_ms` の読み込み、`language` の解釈、不正値・未知キーの拒否 |
 | `src/i18n.rs::tests` | ロケール文字列からの言語判定、優先順位とフォールバック、引数付き文言の整形 |
 | `src/autostart.rs` の Windows 用 tests | Run キーに登録するコマンドの引用符（Windows の CI でのみ実行） |
+| `src/autostart.rs` の Linux 用 tests | `.desktop` の `Exec=` の引用符とエスケープ、自分の登録かどうかの判定（Linux の CI でのみ実行） |
 | `src/updater.rs::tests` | タグのバージョン解釈と比較、`SHA256SUMS` の解析、SHA-256、OS ごとの配布ファイルの選択 |
 
 `ping.rs` のコマンド実行・`notifier.rs`・UI・アップデートの置き換え処理は OS やネットワークに依存するため自動テストはない。変更したら実機で確認すること。macOS では `.app` を作って起動し、`192.0.2.1` を監視する設定で通知が出るかを見る。
@@ -195,6 +198,7 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 ## 未検証・既知の制約
 
 - Nix 版は aarch64-darwin で、通知の表示と、新版を見つけても置き換えずに案内だけ出すことを確認した。ログイン時の起動（`/nix/store` のパスでの `SMAppService` 登録）は確認していない
+- Linux 版は Xvfb + openbox + stalonetray（XEmbed のトレイ）+ dunst で、トレイ・メニュー・通知・一時停止・ログイン時の起動・終了を確認した。GNOME（AppIndicator 拡張）や KDE などの実際のデスクトップ環境と Wayland では未確認。なお Claude Code のクラウド環境では `192.0.2.1` がデフォルトゲートウェイで ping に応答するため、ロスの再現には `203.0.113.1` を使う
 - Windows 版はビルド・clippy・テストを CI で確認しているが、実機での動作は確認していない。通知は `notify-rust` の既定（PowerShell の AppUserModelID）名義で送られる。自前の名義にするには、インストーラーで AppUserModelID を登録する必要がある
 - IPv6 は未対応（macOS では IPv6 に `ping6` が別途必要）
 - 復旧通知は判定ロジックのテストのみで、実際の回線断からの復旧では確認していない

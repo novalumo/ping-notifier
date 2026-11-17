@@ -2,7 +2,7 @@
 
 English | [日本語](README.ja.md)
 
-A menu bar app (system tray app on Windows) that detects ping timeouts (packet loss) and shows them as OS notifications.
+A menu bar app (system tray app on Windows and Linux) that detects ping timeouts (packet loss) and shows them as OS notifications.
 
 - The icon color shows the status: green = OK / yellow = high latency / red = packet loss / gray = paused / orange = cannot run ping
 - Shows the latest response time (RTT) in the menu and the tooltip
@@ -10,7 +10,7 @@ A menu bar app (system tray app on Windows) that detects ping timeouts (packet l
 - Optionally notifies when the response time stays above a threshold (off by default)
 - Notifications are sent only when packet loss starts and when the connection is restored (no repeated notifications during an outage)
 - Updates itself automatically when a new version is released (see below)
-- "Launch at Login" can be toggled from the menu (macOS 13 or later / Windows)
+- "Launch at Login" can be toggled from the menu (macOS 13 or later / Windows / Linux)
 - Display languages: English, Japanese, Chinese (Simplified), Korean, Esperanto, German (follows the OS language; can also be set explicitly)
 
 ## Install with Homebrew (macOS)
@@ -46,6 +46,24 @@ Download the file for your OS from [Releases](https://github.com/novalumo/ping-n
 | Windows (x64) | `PingNotifier-<version>-windows-x64.zip` |
 
 Versions that are not signed and notarized show an OS warning on first launch. See the release notes (`.github/release-notes.md`) for how to proceed. Once installed, the app keeps itself up to date.
+
+## Install on Linux (build from source)
+
+There are no prebuilt Linux binaries yet. Build it with Cargo (a recent stable Rust is required):
+
+```sh
+# Debian / Ubuntu
+sudo apt install build-essential pkg-config libgtk-3-dev libxdo-dev libayatana-appindicator3-dev \
+  libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libvulkan-dev \
+  libfontconfig-dev libfreetype-dev libx11-xcb-dev libxcb1-dev
+cargo install --locked --git https://github.com/novalumo/ping-notifier
+```
+
+Notes:
+
+- The tray icon uses AppIndicator (StatusNotifierItem) and falls back to the legacy system tray (XEmbed). On GNOME, install the AppIndicator extension
+- Notifications need a notification daemon, which most desktop environments have
+- The app does not replace itself. When a new version is released, it notifies you and the menu opens the release page. Run the `cargo install` command again to update
 
 ## Release process
 
@@ -179,6 +197,7 @@ Toggle "Launch at Login" in the menu. The checkmark reflects the registration on
 
 - macOS: registered as Ping Notifier in System Settings > General > Login Items (`SMAppService`, macOS 13 or later). If you previously turned it off there, you will be asked for approval; enable it in the settings window that opens
 - Windows: registered under `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`. If you move the exe, turn the option on again to register the new location
+- Linux: adds `~/.config/autostart/ping-notifier.desktop` (XDG Autostart). If you move the binary, turn the option on again to register the new location
 
 It cannot be changed in development builds such as `cargo run` (the menu item is disabled).
 
@@ -191,4 +210,5 @@ It cannot be changed in development builds such as `cargo run` (the menu item is
 ## Notes
 
 - macOS `ping` also limits the overall timeout in whole seconds (`-t`), so `timeout_ms` is effectively rounded up to seconds
+- The Linux version has been checked on a virtual X11 display (Xvfb) with a legacy (XEmbed) system tray and the dunst notification daemon, but not yet on a real desktop such as GNOME or KDE, or on Wayland
 - The Windows version is only built and tested in CI and has not been verified on a real machine. Notifications are sent with notify-rust's default identity (PowerShell)
