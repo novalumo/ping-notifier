@@ -4,7 +4,7 @@
 
 ## プロジェクト概要
 
-ping のタイムアウト（パケットロス）を検知して OS の通知に表示する、Rust 製のメニューバー（Windows と Linux ではタスクトレイ）常駐アプリ。対象 OS は macOS・Windows・Linux（Linux は x64 のみ配布）。設定は TOML ファイルで、GUI の設定画面は持たない。
+ping のタイムアウト（パケットロス）を検知して OS の通知に表示する、Rust 製のメニューバー（Windows と Linux ではタスクトレイ）常駐アプリ。対象 OS は macOS・Windows・Linux（Linux は x64 のみ配布）。設定は TOML ファイルで、メニューの「設定…」で開く GUI の設定画面からも書き換えられる（画面はファイルを書き換えるだけで、設定の正はファイル）。
 
 ## アーキテクチャ
 
@@ -18,7 +18,8 @@ ping のタイムアウト（パケットロス）を検知して OS の通知�
 - `updater.rs` — GitHub Releases からの自動アップデート（更新スレッド、検証、OS ごとの置き換えと再起動）
 - `autostart.rs` — ログイン時の自動起動の登録 / 解除（macOS: `SMAppService`、Windows: レジストリの Run キー、Linux: XDG Autostart）
 - `i18n.rs` — 表示言語の決定と、利用者に見せる文言（`Msg`）の各言語の訳
-- `config.rs` — 設定ファイルの読み込み・初回生成・検証
+- `config.rs` — 設定ファイルの読み込み・初回生成・検証と、設定画面からの書き込み（`save`）
+- `settings_window.rs` — 設定画面（gpui-component の `Settings`）。保存すると `config::save` で書き、`UserEvent::SettingsSaved` で常駐側に再読み込みさせる
 - `icon.rs` — 状態アイコン（色付きの円）を実行時に RGBA で描画する
 
 スレッドは UI（メイン）・監視・更新の 3 本。async ランタイムは導入していない。
@@ -57,6 +58,8 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 すべてのテンプレートと `Config::default()` は値が一致している必要があり、テストで検証している。キーを追加するときはそのすべてと README（英語・日本語）の表を更新すること。
 
 起動時に設定が壊れていてもアプリは終了せず、既定値で起動してエラーを通知する（常駐アプリなので、修正後にメニューから再読み込みしてもらう）。
+
+設定画面からの保存（`config::save`）は、手書きのテンプレートや利用者のコメントを残すため `toml_edit` でファイルを読み、値が変わったキーだけを書き換える（行末のコメントも残し、`1` と `1.0` のように書き方だけ違う値は書き換えない）。省略できる `latency_threshold_ms` は、有効にするとテンプレートの `# latency_threshold_ms = 200` の行をその場で置き換え、無効にするとその場でコメントアウトに戻す（コメントアウトされた行は toml_edit では次のキーの前置き（prefix）か文書の末尾に入っている）。保存前に `validate` し、一時ファイルに書いて `rename` する。キーを追加するときは `apply_to_text` にも足すこと。テストで全テンプレートを無変更で保存しても 1 文字も変わらないことを確かめている。
 
 ## 規約とノウハウ
 
@@ -100,6 +103,17 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 - macOS の Metal シェーダーは `gpui-pre-platform` の `runtime_shaders` で実行時にコンパイルする。ビルド時のコンパイルには Xcode の Metal ツールチェーン（Xcode 26 では別途ダウンロード）が要り、CI のランナーや Nix のビルド環境にあるとは限らないため。ウィンドウを初めて開くときに少し時間がかかる
 - GPUI は macOS 12 以降が前提のため、`osx_minimum_system_version` も 12.0 にしている
 - GUI アプリでは標準出力が見えないので、利用者に伝えるべきエラーは `report_error` で通知にも出す
+
+### 設定画面（gpui-component）
+
+- 部品は `gpui-component` 0.10.0 の `Settings`（サイドバー付きのページ・グループ・項目）。各欄は値を `App` から読み書きする関数で作る作りなので、編集中の値（下書き）を `Global` の `Draft` に置き、「保存」を押すまでファイルにも監視にも反映しない
+- 下書きは `cx.update_global` で書き換え、画面は `observe_global` で描き直す（「遅延を通知する」に合わせてしきい値の欄を有効・無効にするため）。`global_mut` では通知されない
+- 保存すると `UserEvent::SettingsSaved` を送り、`TrayApp::reload_config`（「設定を再読み込み」と同じ処理）で反映する。言語が変わればメニューも付け直される
+- 設定画面はウィンドウを 1 つだけ開く。開いていれば前面に出す。メニューバー常駐アプリ（Accessory）なので `cx.activate(true)` で前面に出す
+- `gpui_component::init` と、アイコン用の `with_assets(gpui_kit_assets::Assets)` が要る。ウィンドウのルートは `gpui_component::Root`（ドロップダウンなどのポップアップのため）
+- gpui-component 自身の文言（検索欄など）は `rust_i18n` で、対応は en / ja / zh-CN ほか。開くたびに表示言語に合わせ、対応していない言語（ko / eo / de）は英語にしている
+- **`gpui-pre-platform` の `x11` と `wayland` 機能は既定で有効にならない**。付けないと Linux では headless で動き、ウィンドウを開いても何も描かれない（エラーも出ない）。GPUI の内部のエラーは `log` クレートに出るので、調べるときは一時的に `env_logger` などを入れる
+- Linux の Xvfb では `mesa-vulkan-drivers`（llvmpipe）でソフトウェア描画できる。撮影や手動確認に使える
 
 ### パッケージングとアイコン（cargo-bundle の癖）
 
@@ -188,7 +202,7 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 | --- | --- |
 | `src/ping.rs::tests` | macOS・Linux・Windows（各言語版）の出力からの応答時間の読み取り |
 | `src/monitor.rs::tests` | しきい値、1 回の障害につき通知 1 回、復旧時のロス回数と停止時間、遅延の連続回数・解消の判定・遅延していた時間 |
-| `src/config.rs::tests` | 全言語の初期テンプレートと `Config::default()` の一致、テンプレートのコメントを外した `latency_threshold_ms` の読み込み、`language` の解釈、不正値・未知キーの拒否 |
+| `src/config.rs::tests` | 全言語の初期テンプレートと `Config::default()` の一致、テンプレートのコメントを外した `latency_threshold_ms` の読み込み、`language` の解釈、不正値・未知キーの拒否、設定画面からの保存（コメントと書式の保持、`latency_threshold_ms` のその場での有効化・コメントアウト、不正値で書かないこと） |
 | `src/i18n.rs::tests` | ロケール文字列からの言語判定、優先順位とフォールバック、引数付き文言の整形 |
 | `src/autostart.rs` の Windows 用 tests | Run キーに登録するコマンドの引用符（Windows の CI でのみ実行） |
 | `src/autostart.rs` の Linux 用 tests | `.desktop` の `Exec=` の引用符とエスケープ、自分の登録かどうかの判定（Linux の CI でのみ実行） |

@@ -8,6 +8,7 @@ mod icon;
 mod monitor;
 mod notifier;
 mod ping;
+mod settings_window;
 mod updater;
 mod worker;
 
@@ -17,8 +18,9 @@ use std::sync::mpsc::Sender;
 
 use anyhow::{Context, Result};
 use futures::StreamExt;
-use futures::channel::mpsc::unbounded;
-use gpui::{ActivationPolicy, App, QuitMode};
+use futures::channel::mpsc::{UnboundedSender, unbounded};
+use gpui::{ActivationPolicy, App, QuitMode, WindowHandle};
+use gpui_component::Root;
 use semver::Version;
 use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{TrayIcon, TrayIconBuilder};
@@ -34,6 +36,8 @@ enum UserEvent {
     Menu(MenuEvent),
     Status(Status),
     Update(UpdateEvent),
+    /// 設定画面で設定ファイルを保存した
+    SettingsSaved,
 }
 
 fn main() -> Result<()> {
@@ -89,16 +93,20 @@ fn main() -> Result<()> {
     let worker = worker::spawn(config, move |status| {
         let _ = sender.unbounded_send(UserEvent::Status(status));
     });
+    let sender = events.clone();
     let updater = updater::spawn(auto_update, move |event| {
-        let _ = events.unbounded_send(UserEvent::Update(event));
+        let _ = sender.unbounded_send(UserEvent::Update(event));
     });
 
     // 常駐アプリなので、ウィンドウがなくても終了しない（終了はメニューの「終了」と再起動のときだけ）
     gpui_platform::application()
         .with_quit_mode(QuitMode::Explicit)
+        // 設定画面などで gpui-component が使うアイコン
+        .with_assets(gpui_kit_assets::Assets)
         .run(move |cx| {
             // Dock に表示せずメニューバーにだけ常駐する（macOS 以外では何もしない）
             cx.set_activation_policy(ActivationPolicy::Accessory);
+            gpui_component::init(cx);
             #[cfg(target_os = "linux")]
             pump_gtk(cx);
 
@@ -125,6 +133,8 @@ fn main() -> Result<()> {
                 worker,
                 updater,
                 config_path,
+                events,
+                settings_window: None,
             };
             cx.spawn(async move |cx| {
                 while let Some(event) = receiver.next().await {
@@ -168,6 +178,10 @@ struct TrayApp {
     worker: Sender<Command>,
     updater: Sender<UpdateCommand>,
     config_path: PathBuf,
+    /// 設定画面から UI スレッドへイベントを送るため
+    events: UnboundedSender<UserEvent>,
+    /// 開いている設定画面。閉じた後も残るが、操作できなければ開き直す
+    settings_window: Option<WindowHandle<Root>>,
 }
 
 impl TrayApp {
@@ -192,6 +206,28 @@ impl TrayApp {
                 self.available = Some((version, url));
             }
             UserEvent::Menu(e) => self.on_menu(e, cx),
+            UserEvent::SettingsSaved => self.reload_config(),
+        }
+    }
+
+    fn open_settings(&mut self, cx: &mut App) {
+        // すでに開いていれば前面に出すだけ
+        if let Some(handle) = &self.settings_window
+            && handle
+                .update(cx, |_, window, _| window.activate_window())
+                .is_ok()
+        {
+            cx.activate(true);
+            return;
+        }
+        // 画面には設定ファイルの今の内容を出す（手で編集した後でも食い違わないように）
+        let config = config::load_or_create(&self.config_path).unwrap_or_else(|e| {
+            report_error(Msg::ConfigLoadFailedUsingDefaultsTitle, &e);
+            Config::default()
+        });
+        match settings_window::open(config, self.config_path.clone(), self.events.clone(), cx) {
+            Ok(handle) => self.settings_window = Some(handle),
+            Err(e) => report_error(Msg::SettingsOpenFailedTitle, &e),
         }
     }
 
@@ -233,6 +269,8 @@ impl TrayApp {
             let _ = self
                 .worker
                 .send(Command::SetSilent(items.silent.is_checked()));
+        } else if e.id == items.settings.id() {
+            self.open_settings(cx);
         } else if e.id == items.open.id() {
             if let Err(e) = open_in_editor(&self.config_path) {
                 report_error(Msg::ConfigOpenFailedTitle, &e);
@@ -283,6 +321,7 @@ struct MenuItems {
     status: MenuItem,
     pause: CheckMenuItem,
     silent: CheckMenuItem,
+    settings: MenuItem,
     open: MenuItem,
     reload: MenuItem,
     autostart: CheckMenuItem,
@@ -299,6 +338,7 @@ impl MenuItems {
             status: MenuItem::new("", false, None),
             pause: CheckMenuItem::new("", true, false, None),
             silent: CheckMenuItem::new("", true, false, None),
+            settings: MenuItem::new("", true, None),
             open: MenuItem::new("", true, None),
             reload: MenuItem::new("", true, None),
             autostart: CheckMenuItem::new(
@@ -322,6 +362,7 @@ impl MenuItems {
             &PredefinedMenuItem::separator(),
             &self.pause,
             &self.silent,
+            &self.settings,
             &self.open,
             &self.reload,
             &self.autostart,
@@ -342,6 +383,7 @@ impl MenuItems {
         self.status.set_text(&status_text);
         self.pause.set_text(t(Msg::MenuPause));
         self.silent.set_text(t(Msg::MenuSilent));
+        self.settings.set_text(t(Msg::MenuSettings));
         self.open.set_text(t(Msg::MenuOpenConfig));
         self.reload.set_text(t(Msg::MenuReloadConfig));
         self.autostart.set_text(t(if self.autostart_supported {

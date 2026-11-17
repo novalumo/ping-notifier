@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Settings window ("Settings…" in the menu). Saving rewrites only the changed values in the settings file, keeping its comments, and applies them immediately. Editing the file by hand still works
+
 ## [0.11.0] - 2026-11-17
 
 ### Added
