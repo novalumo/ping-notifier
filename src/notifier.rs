@@ -36,14 +36,38 @@ pub(crate) fn running_in_app_bundle() -> bool {
         .unwrap_or(false)
 }
 
+/// パケットロスの通知に付ける音。音の名前の体系は OS ごとに違う
+/// - macOS: `/System/Library/Sounds` のシステムサウンド名
+/// - Windows: トースト通知の音（`tauri-winrt-notification` の `Sound` の名前）
+/// - Linux: freedesktop.org のサウンド名
+#[cfg(target_os = "macos")]
+const ALERT_SOUND: &str = "Basso";
+#[cfg(target_os = "windows")]
+const ALERT_SOUND: &str = "Reminder";
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+const ALERT_SOUND: &str = "dialog-warning";
+
+/// 音なしで通知する。notify-rust は音を指定しないと macOS でも Windows でも無音で送る
 pub fn notify(summary: &str, body: &str) {
-    // 通知に失敗しても監視自体は継続する
-    if let Err(e) = Notification::new()
+    send(summary, body, false);
+}
+
+/// 音付きで通知する。音は OS の通知設定（アプリごとの通知音、集中モードなど）に従う
+pub fn notify_with_sound(summary: &str, body: &str) {
+    send(summary, body, true);
+}
+
+fn send(summary: &str, body: &str, sound: bool) {
+    let mut notification = Notification::new();
+    notification
         .appname("Ping Notifier")
         .summary(summary)
-        .body(body)
-        .show()
-    {
+        .body(body);
+    if sound {
+        notification.sound_name(ALERT_SOUND);
+    }
+    // 通知に失敗しても監視自体は継続する
+    if let Err(e) = notification.show() {
         crate::log(&format!("failed to send a notification: {e}"));
     }
 }

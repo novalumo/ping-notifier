@@ -143,7 +143,11 @@ fn check(config: &Config, monitors: &mut Monitors, silent: bool) -> Status {
                 consecutive,
             };
             log(&format!("[lost] {}", body.in_lang(Lang::En)));
-            if !silent {
+            if silent {
+                // サイレントモードでは通知も音も出さない
+            } else if config.loss_sound {
+                notifier::notify_with_sound(&t(Msg::LostTitle), &t(body));
+            } else {
                 notifier::notify(&t(Msg::LostTitle), &t(body));
             }
             // ロスを優先する。遅延の状態は通知せずに捨て、復旧後に判定し直す

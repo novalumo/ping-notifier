@@ -84,6 +84,8 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 
 遅延（`latency_threshold_ms` を設定したときだけ有効）も同じく、`LatencyMonitor` が状態に入ったときと戻ったときだけイベントを返す。しきい値付近で揺れたときに通知が往復しないよう、入るときも戻るときも `latency_consecutive` 回連続を条件にしている（単発の値で判定し、移動平均は使っていない）。ロスを優先し、ロス中は遅延を判定しない。ロス状態に入ったら遅延の状態は通知せずに捨て、復旧後に判定し直す。応答時間が読み取れなかった ping は遅延の判定に使わない（連続回数を途切れさせない）。遅延の解消通知は `notify_recovery` に従う。アイコンは遅延中が黄色。
 
+パケットロスの通知だけは音を付ける（`loss_sound`、既定でオン）。音は通知に付けて OS に鳴らさせている（`notify-rust` の `sound_name`）ので、依存が増えず、OS のアプリごとの通知音や集中モードの設定にも従う。音の名前の体系は OS ごとに違い、`notifier::ALERT_SOUND` を `cfg` で分けている（macOS は `/System/Library/Sounds` のシステムサウンド名、Windows は `tauri-winrt-notification` の `Sound` の名前、Linux は freedesktop.org のサウンド名）。Windows では名前が解釈できないと黙って無音になるので、変えるときは `Sound::from_str` が受け付ける名前か確かめること。`sound_name` を付けない通知は macOS でも Windows でも無音（Windows はトーストに `<audio silent="true"/>` が付く）。
+
 サイレントモード（メニューのチェック項目）は監視・アイコン・ログはそのままで、ロス・復旧・遅延の通知だけを止める。通知するかどうかだけの切り替えなので `Monitor` は作り直さない（オンのままロスに入ってからオフにしても、その障害の通知は出ず、復旧通知だけが出る）。一時停止と同じく設定ファイルには持たず、起動時はオフ。設定やアップデートのエラーなど、利用者の対応が要る通知は止めない。
 
 ### メニューバー / トレイ

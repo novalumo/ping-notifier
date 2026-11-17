@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Play a sound with the packet loss notification (`loss_sound`, on by default). It follows the OS notification sound settings and is silent in Silent Mode. Other notifications stay silent
+
 ## [0.9.1] - 2026-10-09
 
 ### Changed
