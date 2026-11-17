@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- Linux support (build from source with `cargo install`): tray icon, notifications, and launch at login (XDG Autostart). There are no prebuilt Linux binaries, and the app does not update itself on Linux
+- Linux support: tray icon, notifications, and launch at login (XDG Autostart). Releases include `PingNotifier-<version>-linux-x64.tar.gz`, which updates itself like the macOS and Windows versions. Builds made with `cargo install` only notify you of new versions
 
 ### Changed
 

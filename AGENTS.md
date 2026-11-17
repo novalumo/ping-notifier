@@ -4,7 +4,7 @@
 
 ## プロジェクト概要
 
-ping のタイムアウト（パケットロス）を検知して OS の通知に表示する、Rust 製のメニューバー（Windows と Linux ではタスクトレイ）常駐アプリ。対象 OS は macOS・Windows・Linux（Linux はソースからのビルドのみで、配布物と自動アップデートはない）。設定は TOML ファイルで、GUI の設定画面は持たない。
+ping のタイムアウト（パケットロス）を検知して OS の通知に表示する、Rust 製のメニューバー（Windows と Linux ではタスクトレイ）常駐アプリ。対象 OS は macOS・Windows・Linux（Linux は x64 のみ配布）。設定は TOML ファイルで、GUI の設定画面は持たない。
 
 ## アーキテクチャ
 
@@ -112,13 +112,15 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 
 - `updater.rs` は `api.github.com/repos/novalumo/ping-notifier/releases/latest` を認証なしで読む。リポジトリが非公開だと 404 になり更新できない
 - リポジトリは 2026-10-09 に `siraken/ping-notifier` から `novalumo/ping-notifier` へ移した。v0.5.0 以前は旧名を参照しているが、GitHub のリダイレクト（API は 301 → `/repositories/<id>/...`）を ureq がたどるので更新できる（移動直後に確認済み）。**`siraken/ping-notifier` という名前で新しいリポジトリを作るとリダイレクトが切れ、それらの版が更新できなくなる**
-- 配布ファイル名（`PingNotifier-<ver>-macos-arm64.zip` / `-windows-x64.zip`）と `SHA256SUMS` はアップデータとリリースワークフローの間の契約。どちらかを変えるときは両方を合わせること
+- 配布ファイル名（`PingNotifier-<ver>-macos-arm64.zip` / `-windows-x64.zip` / `-linux-x64.tar.gz`）と `SHA256SUMS` はアップデータとリリースワークフローの間の契約。どちらかを変えるときは両方を合わせること
 - 検証: `SHA256SUMS` のハッシュ照合に加え、macOS では Bundle ID・`codesign --verify --deep --strict`・（実行中のアプリが Developer ID 署名なら）同一 Team ID の要件を確認する。Windows は署名がないのでハッシュ照合のみ
 - macOS の置き換えは `.app` と同じディレクトリに `.ping-notifier-update/` を作り、`ditto` で展開して `rename` で入れ替える（同一ボリューム内で原子的に入れ替えるため）。署名済み `.app` の展開に `unzip` や `zip` クレートを使うと拡張属性やシンボリックリンクが崩れて署名が壊れるので `ditto` を使う
 - macOS の再起動は、**自身が動いているうちに** `open -n` で新しい版を起動し、成功を確認してから終了する。以前は子プロセスの `/bin/sh` で自身の終了を待ってから `open` していたが、置き換え直後の .app に対する Gatekeeper の初回起動処理（CoreServicesUIAgent の quarantine-resolver）で要求元の自身が既に存在せず `-600 procNotFound` で失敗し、アプリが消えたまま起動しないことがあった（v0.3.0 で発生）。`-n` がないと同じ Bundle ID の自身が前面に出るだけになる。新旧が一瞬同時に動くのは許容している
 - 「アップデートしました」の通知は、**再起動後の新しい版**が送る。`relaunch` が新しい版に `--updated-from <旧バージョン>` を渡し（macOS は `open -n <app> --args ...`）、`main` が起動時に `updater::updated_from` で読んで通知する。v0.5.0 までは置き換え直後に旧版から送っていたが、自身の `.app` が既に消えているため、usernoted が送り主の署名を検証できず（securityd が ENOENT）`Denying message ... LegacyConnection identifier: com.novalumo.ping-notifier` で拒否していた（v0.5.0 → v0.5.1 で `log show` により確認）。同じ理由で、再起動に失敗したときの通知（`RelaunchFailedTitle`）も macOS では届かないことがある
 - Windows は実行中の exe を上書きできないが名前は変えられるため、`ping-notifier.exe.old` に退避して差し替え、新しい exe を起動してから終了する。`.old` は次回起動時に `cleanup_previous` が消す
-- 開発ビルド（macOS で `.app` 外、Windows の debug ビルド）では置き換えず、ダウンロードページの案内にとどめる
+- Linux は tar.gz から `ping-notifier` だけを取り出し（アーカイブ内のパスは書き込み先に使わない）、実行ファイルと同じディレクトリの `.ping-notifier-update` に書いて実行権限を付け、`rename` で置き換える。Linux では実行中のファイルも `rename` で置き換えられる（動いているプロセスは古い中身を使い続ける）ので、Windows のような退避は要らない。再起動は新しい版を `process_group(0)` で起動してから終了する（端末から起動していても端末と一緒に終了しないように）
+- Linux で自身を置き換えるのは公式の配布物だけ。リリースのワークフローがビルド時に `PING_NOTIFIER_OFFICIAL_BUILD` を設定し、`option_env!` で埋め込む。`cargo install` やディストリビューションのパッケージで入れた版を勝手に置き換えないため（新版の通知と案内は出す）
+- 開発ビルド（macOS で `.app` 外、Windows・Linux の debug ビルド）では置き換えず、ダウンロードページの案内にとどめる
 - 自動更新に失敗した版は、手動確認されるまで自動では再試行しない（失敗通知の繰り返しを防ぐ）
 - `cfg(target_os = "macos")` 内だけで使う関数を共通部分に置くと、Windows の CI で dead code として `-D warnings` に落ちる。OS 固有の補助関数は `platform` モジュール内に置くこと
 
@@ -160,9 +162,10 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 | ワークフロー | 契機 | 内容 |
 | --- | --- | --- |
 | `.github/workflows/ci.yml` | main への push、PR | macOS / Windows / Linux（Ubuntu）で `fmt --check`・`clippy -D warnings`・`test` |
-| `.github/workflows/release.yml` | `v*` タグの push、手動実行 | macOS（Apple Silicon）の `.app` と Windows x64 `.exe` を zip 化。タグ時のみ GitHub Release を作成し、Homebrew の Cask を更新 |
+| `.github/workflows/release.yml` | `v*` タグの push、手動実行 | macOS（Apple Silicon）の `.app` と Windows x64 `.exe` を zip 化、Linux x64 のバイナリを tar.gz 化。タグ時のみ GitHub Release を作成し、Homebrew の Cask を更新 |
 
 - Linux の CI では、tray-icon（GTK・AppIndicator・libxdo）と GPUI（X11・Wayland・Vulkan・fontconfig）の開発用パッケージを apt で入れている。README の Linux のビルド手順と同じ一覧
+- Linux の配布物は、古めの glibc で多くのディストリビューションで動くよう `ubuntu-22.04` でビルドする
 - CI は Nix を使わず `dtolnay/rust-toolchain@stable` を使う（Windows ランナーで Nix が使えないため）。`cargo-bundle` は `cargo install` で入れる
 - macOS は Apple Silicon（`aarch64-apple-darwin`）のみ。Intel Mac は今後廃止されるため対応しない（v0.4.0 までは `lipo` で結合した universal を `-macos-universal.zip` として配布していた）。`cargo bundle` は `--locked` を受け付けないので、先に `cargo build --locked` しておく
 - リリースはタグと `Cargo.toml` の `version` の一致を検証する。バージョンを上げるときは `Cargo.toml` を更新してからタグを打つ
@@ -189,7 +192,7 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 | `src/i18n.rs::tests` | ロケール文字列からの言語判定、優先順位とフォールバック、引数付き文言の整形 |
 | `src/autostart.rs` の Windows 用 tests | Run キーに登録するコマンドの引用符（Windows の CI でのみ実行） |
 | `src/autostart.rs` の Linux 用 tests | `.desktop` の `Exec=` の引用符とエスケープ、自分の登録かどうかの判定（Linux の CI でのみ実行） |
-| `src/updater.rs::tests` | タグのバージョン解釈と比較、`SHA256SUMS` の解析、SHA-256、OS ごとの配布ファイルの選択 |
+| `src/updater.rs::tests` | タグのバージョン解釈と比較、`SHA256SUMS` の解析、SHA-256、OS ごとの配布ファイルの選択、Linux の tar.gz からの実行ファイルの取り出し（Linux の CI でのみ実行） |
 
 `ping.rs` のコマンド実行・`notifier.rs`・UI・アップデートの置き換え処理は OS やネットワークに依存するため自動テストはない。変更したら実機で確認すること。macOS では `.app` を作って起動し、`192.0.2.1` を監視する設定で通知が出るかを見る。
 

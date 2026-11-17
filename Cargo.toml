@@ -30,6 +30,9 @@ winresource = "0.1.31"
 # tray-icon は Linux で GTK のメインループを必要とする（GPUI のループの中で回す）
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
+# 自動アップデートで配布物（tar.gz）を展開する
+flate2 = "1"
+tar = { version = "0.4", default-features = false }
 
 [target."cfg(windows)".dependencies]
 windows-registry = "0.100.0"

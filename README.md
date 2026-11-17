@@ -44,12 +44,17 @@ Download the file for your OS from [Releases](https://github.com/novalumo/ping-n
 | --- | --- |
 | macOS 12 or later (Apple Silicon) | `PingNotifier-<version>-macos-arm64.zip` |
 | Windows (x64) | `PingNotifier-<version>-windows-x64.zip` |
+| Linux (x64) | `PingNotifier-<version>-linux-x64.tar.gz` |
 
 Versions that are not signed and notarized show an OS warning on first launch. See the release notes (`.github/release-notes.md`) for how to proceed. Once installed, the app keeps itself up to date.
 
-## Install on Linux (build from source)
+## Install on Linux
 
-There are no prebuilt Linux binaries yet. Build it with Cargo (a recent stable Rust is required):
+Download `PingNotifier-<version>-linux-x64.tar.gz` from [Releases](https://github.com/novalumo/ping-notifier/releases), extract it, and put `ping-notifier` in a directory you can write to, such as `~/.local/bin`. The app updates itself by replacing that file.
+
+On Debian / Ubuntu, the libraries it needs are in `libgtk-3-0` and `libayatana-appindicator3-1`, which most desktops already have.
+
+You can also build it with Cargo (a recent stable Rust is required). Builds made this way do not replace themselves: when a new version is released, the app notifies you and the menu opens the release page. Run the `cargo install` command again to update.
 
 ```sh
 # Debian / Ubuntu
@@ -63,7 +68,7 @@ Notes:
 
 - The tray icon uses AppIndicator (StatusNotifierItem) and falls back to the legacy system tray (XEmbed). On GNOME, install the AppIndicator extension
 - Notifications need a notification daemon, which most desktop environments have
-- The app does not replace itself. When a new version is released, it notifies you and the menu opens the release page. Run the `cargo install` command again to update
+- Only x64 builds are distributed
 
 ## Release process
 
@@ -80,7 +85,7 @@ The app checks the latest version on [Releases](https://github.com/novalumo/ping
 1. The hash of the downloaded file matches `SHA256SUMS` attached to the release
 2. macOS only: the bundle ID of the extracted `.app` matches and its code signature is valid. If the running app is signed with a Developer ID, the new version must be signed by the same Team ID
 
-You can also check manually with "Check for Updates" in the menu. Set `auto_update = false` to turn off automatic checks. If replacing the app fails, or when running a development build, the menu offers to open the download page instead.
+You can also check manually with "Check for Updates" in the menu. Set `auto_update = false` to turn off automatic checks. If replacing the app fails, or when running a development build or a Linux build you made yourself, the menu offers to open the download page instead.
 
 The GitHub API is accessed without authentication, so the repository must be public.
 

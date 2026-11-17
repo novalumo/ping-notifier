@@ -44,12 +44,17 @@ flake はソースからビルドする。`$out/Applications/Ping Notifier.app` 
 | --- | --- |
 | macOS 12 以降（Apple Silicon） | `PingNotifier-<version>-macos-arm64.zip` |
 | Windows（x64） | `PingNotifier-<version>-windows-x64.zip` |
+| Linux（x64） | `PingNotifier-<version>-linux-x64.tar.gz` |
 
 署名・公証が済んでいない版では、初回起動時に OS の警告が出る。回避手順は各リリースのノート（`.github/release-notes.md`）を参照。一度インストールすれば、以降は自動でアップデートされる。
 
-## Linux でインストール（ソースからビルド）
+## Linux でインストール
 
-Linux 向けのビルド済みファイルはまだない。Cargo でビルドする（新しめの安定版 Rust が必要）。
+[Releases](https://github.com/novalumo/ping-notifier/releases) から `PingNotifier-<version>-linux-x64.tar.gz` をダウンロードして展開し、`ping-notifier` を `~/.local/bin` など書き込める場所に置く。アプリはこのファイルを置き換えて自動でアップデートする。
+
+Debian / Ubuntu では、必要なライブラリは `libgtk-3-0` と `libayatana-appindicator3-1` にある（たいていのデスクトップには入っている）。
+
+Cargo でビルドすることもできる（新しめの安定版 Rust が必要）。この方法で入れた版はアプリ自身による置き換えを行わず、新しいバージョンが公開されると通知し、メニューからリリースページを開ける。更新は `cargo install` をもう一度実行する。
 
 ```sh
 # Debian / Ubuntu
@@ -63,7 +68,7 @@ cargo install --locked --git https://github.com/novalumo/ping-notifier
 
 - トレイアイコンは AppIndicator（StatusNotifierItem）を使い、なければ従来のシステムトレイ（XEmbed）に表示する。GNOME では AppIndicator の拡張機能を入れる
 - 通知には通知デーモンが必要（たいていのデスクトップ環境に入っている）
-- アプリ自身による置き換えは行わない。新しいバージョンが公開されると通知し、メニューからリリースページを開ける。更新は `cargo install` をもう一度実行する
+- 配布しているのは x64 版のみ
 
 ## リリース手順
 
@@ -80,7 +85,7 @@ cargo install --locked --git https://github.com/novalumo/ping-notifier
 1. リリースに添付された `SHA256SUMS` とダウンロードしたファイルのハッシュが一致すること
 2. macOS のみ: 展開した `.app` の Bundle ID が一致し、署名の検証が通ること。実行中のアプリが Developer ID で署名されている場合は、同じ Team ID の署名であることも求める
 
-メニューの「アップデートを確認」で手動でも確認できる。設定の `auto_update = false` で自動確認を止められる。置き換えに失敗した場合や開発ビルドでは、メニューからダウンロードページを開くよう案内する。
+メニューの「アップデートを確認」で手動でも確認できる。設定の `auto_update = false` で自動確認を止められる。置き換えに失敗した場合や、開発ビルド・自分でビルドした Linux 版では、メニューからダウンロードページを開くよう案内する。
 
 GitHub API に認証なしでアクセスするため、リポジトリが公開されている必要がある。
 
