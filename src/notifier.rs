@@ -26,7 +26,21 @@ pub fn init() {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+/// 通知の送り主となるアプリ（AppUserModelID）をレジストリに登録する。他の通知より前に 1 度だけ呼ぶこと。
+///
+/// notify-rust は Windows で AppUserModelID を指定しないと PowerShell 名義で送る。
+/// 登録に失敗したときは、通知が届かなくならないよう PowerShell 名義のままにする。
+#[cfg(target_os = "windows")]
+pub fn init() {
+    match windows::register() {
+        Ok(()) => windows::REGISTERED.store(true, std::sync::atomic::Ordering::Relaxed),
+        Err(e) => crate::log(&format!(
+            "failed to register the notification sender, using PowerShell instead: {e:#}"
+        )),
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub fn init() {}
 
 #[cfg(target_os = "macos")]
@@ -66,8 +80,59 @@ fn send(summary: &str, body: &str, sound: bool) {
     if sound {
         notification.sound_name(ALERT_SOUND);
     }
+    #[cfg(target_os = "windows")]
+    if windows::REGISTERED.load(std::sync::atomic::Ordering::Relaxed) {
+        notification.app_id(windows::APP_USER_MODEL_ID);
+    }
     // 通知に失敗しても監視自体は継続する
     if let Err(e) = notification.show() {
         crate::log(&format!("failed to send a notification: {e}"));
+    }
+}
+
+/// Windows の通知の送り主（AppUserModelID）の登録。
+///
+/// パッケージ化していないアプリでも、`HKCU\Software\Classes\AppUserModelId\<ID>` に
+/// 表示名とアイコンを書けば、その ID で送った通知にアプリ名とアイコンが表示される
+/// （スタートメニューのショートカットは要らない）。
+#[cfg(target_os = "windows")]
+mod windows {
+    use std::fs;
+    use std::sync::atomic::AtomicBool;
+
+    use anyhow::{Context, Result};
+    use windows_registry::CURRENT_USER;
+
+    /// 変えると Windows は別のアプリとみなし、通知の設定（オン・オフなど）が引き継がれない
+    pub(super) const APP_USER_MODEL_ID: &str = "Novalumo.PingNotifier";
+    const DISPLAY_NAME: &str = "Ping Notifier";
+    /// 通知に表示するアイコン。exe に埋め込んだアイコンは使えず、画像ファイルのパスで指定する
+    const ICON: &[u8] = include_bytes!("../icons/icon.ico");
+
+    /// 登録できたか。できていなければ PowerShell 名義で送る
+    pub(super) static REGISTERED: AtomicBool = AtomicBool::new(false);
+
+    pub(super) fn register() -> Result<()> {
+        let dir = dirs::data_local_dir()
+            .context("cannot determine the local app data directory")?
+            .join("ping-notifier");
+        fs::create_dir_all(&dir).with_context(|| format!("cannot create {}", dir.display()))?;
+        let icon = dir.join("notification-icon.ico");
+        // 起動のたびに書き換えないよう、中身が違うときだけ書く
+        if fs::read(&icon).ok().as_deref() != Some(ICON) {
+            fs::write(&icon, ICON).with_context(|| format!("cannot write {}", icon.display()))?;
+        }
+        let icon = icon.to_str().context("the icon path is not valid UTF-8")?;
+
+        let key = CURRENT_USER
+            .create(format!(
+                r"Software\Classes\AppUserModelId\{APP_USER_MODEL_ID}"
+            ))
+            .context("cannot open the AppUserModelId registry key")?;
+        key.set_string("DisplayName", DISPLAY_NAME)
+            .context("cannot set the display name")?;
+        key.set_string("IconUri", icon)
+            .context("cannot set the icon")?;
+        Ok(())
     }
 }

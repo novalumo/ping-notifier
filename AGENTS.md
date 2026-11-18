@@ -71,6 +71,13 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 - Bundle ID を変えると macOS は別アプリとみなすため、通知の許可を取り直すことになる
 - 通知の許可前は、許可ダイアログのアイコンが空白になることがある。許可後のバナーには正しく表示される
 
+### 通知（Windows）
+
+- `notify-rust` は AppUserModelID（AUMID）を指定しないと PowerShell 名義で送る。`notifier::init()` で `HKCU\Software\Classes\AppUserModelId\Novalumo.PingNotifier` に `DisplayName` と `IconUri` を書き、その ID（`app_id`）で送っている。パッケージ化していないアプリでもインストーラーやスタートメニューのショートカットは要らない
+- `IconUri` は画像ファイルのパスで、exe に埋め込んだアイコンは使えない。`icons/icon.ico` を `include_bytes!` で埋め込み、`%LOCALAPPDATA%\ping-notifier\notification-icon.ico` に書き出している（中身が違うときだけ書く）
+- 登録に失敗したら PowerShell 名義のまま送る（通知が届かなくならないように）
+- AUMID を変えると Windows は別のアプリとみなし、利用者がした通知の設定（オン・オフ、通知音など）が引き継がれない
+
 ### ping
 
 - raw ICMP ソケットは OS によって管理者権限が必要なため、OS 標準の `ping` コマンドに委譲している。OS ごとにオプションの単位が違うので `build_command` を `cfg` で分けている
@@ -216,6 +223,6 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 
 - Nix 版は aarch64-darwin で、通知の表示と、新版を見つけても置き換えずに案内だけ出すことを確認した。ログイン時の起動（`/nix/store` のパスでの `SMAppService` 登録）は確認していない
 - Linux 版は Xvfb + openbox + stalonetray（XEmbed のトレイ）+ dunst で、トレイ・メニュー・通知・一時停止・ログイン時の起動・終了を確認した。GNOME（AppIndicator 拡張）や KDE などの実際のデスクトップ環境と Wayland では未確認。なお Claude Code のクラウド環境では `192.0.2.1` がデフォルトゲートウェイで ping に応答するため、ロスの再現には `203.0.113.1` を使う
-- Windows 版はビルド・clippy・テストを CI で確認しているが、実機での動作は確認していない。通知は `notify-rust` の既定（PowerShell の AppUserModelID）名義で送られる。自前の名義にするには、インストーラーで AppUserModelID を登録する必要がある
+- Windows 版はビルド・clippy・テストを CI で確認しているが、実機での動作は確認していない
 - IPv6 は未対応（macOS では IPv6 に `ping6` が別途必要）
 - 復旧通知は判定ロジックのテストのみで、実際の回線断からの復旧では確認していない
