@@ -220,4 +220,4 @@ It cannot be changed in development builds such as `cargo run` (the menu item is
 
 - macOS `ping` also limits the overall timeout in whole seconds (`-t`), so `timeout_ms` is effectively rounded up to seconds
 - The Linux version has been checked on a virtual X11 display (Xvfb) with a legacy (XEmbed) system tray and the dunst notification daemon, but not yet on a real desktop such as GNOME or KDE, or on Wayland
-- The Windows version is only built and tested in CI and has not been verified on a real machine. Notifications are sent with notify-rust's default identity (PowerShell)
+- The Windows version is only built and tested in CI and has not been verified on a real machine.

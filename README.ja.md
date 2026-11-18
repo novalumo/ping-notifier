@@ -220,4 +220,4 @@ cp -R "target/release/bundle/osx/Ping Notifier.app" /Applications/
 
 - macOS の `ping` はタイムアウトを秒単位（`-t`）でも制限しているため、`timeout_ms` は実質的に秒単位に切り上げられる
 - Linux 版は、仮想ディスプレイ（Xvfb）上の従来のシステムトレイ（XEmbed）と通知デーモン dunst で動作を確認した。GNOME や KDE などの実際のデスクトップ環境と Wayland では未確認
-- Windows 版はビルドとテストのみ CI で確認しており、実機での動作は未検証。通知は notify-rust の既定（PowerShell 名義）で送られる
+- Windows 版はビルドとテストのみ CI で確認しており、実機での動作は未検証

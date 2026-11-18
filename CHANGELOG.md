@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Windows notifications now show "Ping Notifier" and its icon instead of Windows PowerShell. Ping Notifier also appears under its own name in the Windows notification settings
+
 ## [0.12.0] - 2026-11-17
 
 ### Added
