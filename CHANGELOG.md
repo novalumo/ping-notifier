@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-11-19
+
 ### Fixed
 
 - No text was shown in the settings window on macOS
@@ -143,7 +145,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Icon color shows the status: OK / packet loss / paused / cannot run ping
 - TOML settings file that can be opened and reloaded from the menu
 
-[Unreleased]: https://github.com/novalumo/ping-notifier/compare/v0.12.1...HEAD
+[Unreleased]: https://github.com/novalumo/ping-notifier/compare/v0.12.2...HEAD
+[0.12.2]: https://github.com/novalumo/ping-notifier/compare/v0.12.1...v0.12.2
 [0.12.1]: https://github.com/novalumo/ping-notifier/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/novalumo/ping-notifier/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/novalumo/ping-notifier/compare/v0.10.0...v0.11.0
