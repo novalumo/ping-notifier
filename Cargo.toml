@@ -15,8 +15,9 @@ gpui-component = "=0.10.0"
 gpui-kit-assets = "=0.10.0"
 # macOS の Metal シェーダーはビルド時ではなく実行時にコンパイルする。ビルド時のコンパイルには
 # Xcode の Metal ツールチェーンが要り、CI のランナーや Nix のビルド環境にあるとは限らないため
-# Linux の表示サーバー（X11・Wayland）への接続は既定では有効にならない。付けないとウィンドウが描かれない
-gpui_platform = { package = "gpui-pre-platform", version = "=0.3.12", features = ["runtime_shaders", "x11", "wayland"] }
+# macOS の文字の描画（font-kit）と Linux の表示サーバー（X11・Wayland）への接続は既定では有効にならない。
+# font-kit がないと macOS では文字が描かれず、x11・wayland がないと Linux ではウィンドウが描かれない
+gpui_platform = { package = "gpui-pre-platform", version = "=0.3.12", features = ["runtime_shaders", "font-kit", "x11", "wayland"] }
 notify-rust = "4.18.2"
 semver = "1.0.28"
 serde = { version = "1.0.229", features = ["derive"] }

@@ -119,7 +119,7 @@ flake は devShell に加え、macOS 向けの `packages`（`nix/package.nix`）
 - 設定画面はウィンドウを 1 つだけ開く。開いていれば前面に出す。メニューバー常駐アプリ（Accessory）なので `cx.activate(true)` で前面に出す
 - `gpui_component::init` と、アイコン用の `with_assets(gpui_kit_assets::Assets)` が要る。ウィンドウのルートは `gpui_component::Root`（ドロップダウンなどのポップアップのため）
 - gpui-component 自身の文言（検索欄など）は `rust_i18n` で、対応は en / ja / zh-CN ほか。開くたびに表示言語に合わせ、対応していない言語（ko / eo / de）は英語にしている
-- **`gpui-pre-platform` の `x11` と `wayland` 機能は既定で有効にならない**。付けないと Linux では headless で動き、ウィンドウを開いても何も描かれない（エラーも出ない）。GPUI の内部のエラーは `log` クレートに出るので、調べるときは一時的に `env_logger` などを入れる
+- **`gpui-pre-platform` の `font-kit`・`x11`・`wayland` 機能は既定で有効にならない**。`font-kit` を付けないと macOS では文字を描かない仮のテキストシステム（`NoopTextSystem`）で動き、枠やアイコンは出るのに文字だけが出ない（v0.12.0 で発生。Windows は DirectWrite なので影響しない）。`x11`・`wayland` を付けないと Linux では headless で動き、ウィンドウを開いても何も描かれない。どちらもエラーは出ず、`log` に警告が出るだけ。GPUI の内部のエラーは `log` クレートに出るので、調べるときは一時的に `env_logger` などを入れる
 - Linux の Xvfb では `mesa-vulkan-drivers`（llvmpipe）でソフトウェア描画できる。撮影や手動確認に使える
 
 ### パッケージングとアイコン（cargo-bundle の癖）

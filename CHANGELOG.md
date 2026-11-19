@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- No text was shown in the settings window on macOS
+
 ## [0.12.1] - 2026-11-18
 
 ### Changed
